@@ -14,6 +14,7 @@ A lightweight black Reel-style video website designed for deployment on GitHub P
   - Watch on Terabox
 - Play control plays the video only
 - Clearly labelled Advertisement slots (native banner and 300×250)
+- Adsterra Social Bar loaded once, before `</body>`
 - Optional labelled Sponsored / Discover link, separate from play and watch buttons
 - First-party analytics: timezone/country proxy, device, referrer, engagement
 - Only one video plays at a time
@@ -82,6 +83,7 @@ Paste the masterreposts.xyz **300×250_1 Get Code** key into `ads/banner-300x250
 
 - Native banner: Adsterra container `e02a3877d8ff4a051ec557717047de62`
 - 300×250: isolated iframe, labelled Advertisement
+- Social Bar: official script immediately before `</body>`
 - SmartLink: labelled Sponsored / Discover only
 
 Do not:
