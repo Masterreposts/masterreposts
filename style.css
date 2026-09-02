@@ -1,0 +1,138 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: #000; scroll-behavior: smooth; }
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.site-header {
+  width: 100%;
+  padding: 18px 15px;
+  text-align: center;
+  border-bottom: 1px solid #1a1a1a;
+  background: #000;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-header h1 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.site-header h1 span {
+  color: #1683ff;
+  margin-left: 5px;
+}
+
+.feed {
+  width: 100%;
+  max-width: 650px;
+  margin: 0 auto;
+  padding: 15px 10px 40px;
+}
+
+.video-card {
+  width: 100%;
+  margin: 0 auto 28px;
+  background: #080808;
+  border: 1px solid #1b1b1b;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.video-container {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.video-container video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain; /* preserves 16:9 videos without cropping */
+  background: #000;
+}
+
+.play-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+  z-index: 2;
+}
+
+.play-gate.hidden { display: none; }
+
+.gate-button {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #1683ff;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.video-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 46px;
+  background: #087cff;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.action-btn:hover { background: #006de8; }
+
+.ad-slot {
+  width: 100%;
+  min-height: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 15px auto 30px;
+  overflow: hidden;
+}
+
+footer {
+  padding: 25px 15px;
+  text-align: center;
+  border-top: 1px solid #1a1a1a;
+  color: #777;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .feed { padding: 10px 6px 30px; }
+  .video-card { border-radius: 8px; margin-bottom: 22px; }
+  .video-actions { gap: 8px; padding: 10px; }
+  .action-btn { min-height: 44px; font-size: 12px; }
+}
