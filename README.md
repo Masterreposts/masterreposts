@@ -12,10 +12,10 @@ A lightweight black Reel-style video website designed for deployment on GitHub P
 - Two blue buttons below every video
   - Watch on Sophon
   - Watch on Terabox
-- Alternating play-gate configuration
-- Odd-numbered videos use SmartLink A
-- Even-numbered videos use SmartLink B
-- Session-based unlock state
+- Play control plays the video only
+- Clearly labelled Advertisement slots (native banner and 300×250)
+- Optional labelled Sponsored / Discover link, separate from play and watch buttons
+- First-party analytics: timezone/country proxy, device, referrer, engagement
 - Only one video plays at a time
 - Mobile responsive
 
@@ -27,6 +27,9 @@ masterreposts_package/
 ├── style.css
 ├── script.js
 ├── README.md
+├── ads/
+│   ├── native.html
+│   └── banner-300x250.html
 └── videos/
     ├── video1.mp4
     ├── video2.mp4
@@ -47,37 +50,45 @@ The JavaScript expects:
 
 You can rename or change the list inside `script.js`.
 
-## Play-Gate Logic
+## Traffic protection
 
-The configured logic is:
+Built-in rules:
 
-| Video | SmartLink Group |
+1. Never auto-open SmartLinks. There is no `window.open` on page load, scroll, autoplay, timers, or random clicks.
+2. The play button plays the video. It does not open an advertisement.
+3. Ads sit in labelled slots, separated from content.
+4. SmartLinks are only used on a clearly labelled **Sponsored · Discover** control.
+
+Visitor flow:
+
+Visitor arrives → native banner → video plays normally → labelled ad slot → optional labelled sponsored link → next video
+
+## Ad schedule
+
+Repeats every 10 videos:
+
+| After video | Slot |
 |---|---|
-| Odd-numbered videos (1, 3, 5, ...) | Odd |
-| Even-numbered videos (2, 4, 6, ...) | Even |
+| Page top | Native banner |
+| 3, 13, 23 | 300×250 banner |
+| 5, 15, 25 | Native banner |
+| 8, 18 | 300×250 banner |
 
-Flow:
+In-feed ads load inside isolated iframes (`ads/native.html`, `ads/banner-300x250.html`) so Adsterra `document.write` tags cannot replace the page.
 
-1. Visitor sees a play overlay.
-2. Visitor clicks the play button.
-3. The configured destination is opened from that user interaction.
-4. The video is unlocked.
-5. The video attempts to start playing.
-6. The unlock is remembered for the current browser session.
-
-IMPORTANT: Confirm with your advertising providers that this traffic and content-gating flow is permitted under their current policies before deploying it.
+Paste the masterreposts.xyz **300×250_1 Get Code** key into `ads/banner-300x250.html` if the current key placeholder still needs replacing.
 
 ## Ad Placements
 
-`index.html` includes a placeholder for a native banner.
+- Native banner: Adsterra container `e02a3877d8ff4a051ec557717047de62`
+- 300×250: isolated iframe, labelled Advertisement
+- SmartLink: labelled Sponsored / Discover only
 
-For third-party advertising code:
+Do not:
 
-- Follow the provider's official implementation instructions.
-- Avoid automatically triggering redirects.
-- Avoid disguising advertisements as browser/video controls.
-- Test desktop and mobile behavior.
-- Check that scripts do not violate your hosting provider's policies.
+- Automatically trigger redirects
+- Disguise advertisements as browser or video controls
+- Count play clicks as ad clicks
 
 ## Deploying to GitHub Pages
 

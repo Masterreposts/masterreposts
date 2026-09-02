@@ -62,7 +62,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: contain; /* preserves 16:9 videos without cropping */
+  object-fit: contain;
   background: #000;
 }
 
@@ -92,7 +92,7 @@ body {
 .video-actions {
   display: flex;
   gap: 10px;
-  padding: 12px;
+  padding: 12px 12px 0;
 }
 
 .action-btn {
@@ -112,14 +112,67 @@ body {
 
 .action-btn:hover { background: #006de8; }
 
+.sponsored-row {
+  padding: 8px 12px 12px;
+  text-align: center;
+}
+
+.sponsored-btn {
+  display: inline-block;
+  color: #9aa3ad;
+  font-size: 12px;
+  text-decoration: none;
+  border: 1px solid #2a2a2a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #111;
+}
+
+.sponsored-btn:hover {
+  color: #d0d4d8;
+  border-color: #444;
+}
+
 .ad-slot {
   width: 100%;
-  min-height: 20px;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  margin: 15px auto 30px;
+  margin: 8px auto 30px;
+  padding: 12px 8px 16px;
+  background: #050505;
+  border: 1px dashed #2a2a2a;
+  border-radius: 10px;
   overflow: hidden;
+}
+
+.ad-label {
+  width: 100%;
+  text-align: center;
+  color: #777;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.banner-frame {
+  width: 300px;
+  height: 250px;
+  border: 0;
+  background: #000;
+  display: block;
+}
+
+.native-frame {
+  width: 100%;
+  max-width: 600px;
+  min-height: 120px;
+  height: 280px;
+  border: 0;
+  background: #000;
+  display: block;
 }
 
 footer {
@@ -133,6 +186,7 @@ footer {
 @media (max-width: 600px) {
   .feed { padding: 10px 6px 30px; }
   .video-card { border-radius: 8px; margin-bottom: 22px; }
-  .video-actions { gap: 8px; padding: 10px; }
+  .video-actions { gap: 8px; padding: 10px 10px 0; }
   .action-btn { min-height: 44px; font-size: 12px; }
+  .banner-frame { transform-origin: top center; }
 }
