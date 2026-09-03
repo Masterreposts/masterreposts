@@ -58,6 +58,9 @@ const ads = {
   bannerKey: "REPLACE_MASTERREPOSTS_300x250_KEY"
 };
 
+const vastTagUrl = "https://direct-league.com/dWmLF.z/dTGmNLvHZZGqUB/vepmJ9wuRZfUllxkhP/T/crzZOwDJE/0mMUDJUet/NYzMM/4/MlTfQnw/OWSNZGsOaBW_1Yp-dCDl0FxJ";
+
+const featuredCount = 10;
 const feed = document.getElementById("video-feed");
 
 function getSmartLink(videoNumber) {
@@ -74,6 +77,18 @@ function adAfterVideo(videoNumber) {
   if (position === 3 || position === 8) return "banner";
   if (position === 5) return "native";
   return null;
+}
+
+function buildFeedItems() {
+  const items = [];
+  videos.forEach((src, index) => {
+    const number = index + 1;
+    items.push({ type: "video", src: src, number: number });
+    if (number % 3 === 0) items.push({ type: "vast-ad" });
+    const slot = adAfterVideo(number);
+    if (slot) items.push({ type: slot });
+  });
+  return items;
 }
 
 function collectContext() {
@@ -130,6 +145,68 @@ function createAdSlot(type) {
   return section;
 }
 
+function posterSrc(videoNumber) {
+  return "posters/video" + videoNumber + ".jpg";
+}
+
+function createFeaturedSlider() {
+  const featuredTrack = document.getElementById("featured-track");
+  const prev = document.getElementById("featured-prev");
+  const next = document.getElementById("featured-next");
+  if (!featuredTrack || !prev || !next) return;
+
+  videos.slice(0, featuredCount).forEach((videoSrc, index) => {
+    const videoNumber = index + 1;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "featured-item";
+    item.setAttribute("aria-label", "Go to video " + videoNumber);
+
+    const thumb = document.createElement("img");
+    thumb.src = posterSrc(videoNumber);
+    thumb.alt = "Video " + videoNumber;
+    thumb.loading = "lazy";
+    thumb.decoding = "async";
+    thumb.addEventListener("error", () => {
+      thumb.remove();
+      item.classList.add("no-poster");
+    });
+
+    const play = document.createElement("span");
+    play.className = "featured-play";
+    play.textContent = "▶";
+
+    const caption = document.createElement("span");
+    caption.className = "featured-caption";
+    caption.textContent = "Video " + videoNumber;
+
+    item.append(thumb, play, caption);
+    item.addEventListener("click", () => {
+      const target = document.getElementById("reel-" + videoNumber);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        target.classList.add("reel-highlight");
+        window.setTimeout(() => target.classList.remove("reel-highlight"), 1400);
+      }
+      track("engagement", { type: "featured", video: videoNumber });
+    });
+
+    featuredTrack.appendChild(item);
+  });
+
+  function scrollStep() {
+    return Math.max(featuredTrack.clientWidth * 0.75, 140);
+  }
+
+  prev.addEventListener("click", () => {
+    featuredTrack.scrollBy({ left: -scrollStep(), behavior: "smooth" });
+  });
+
+  next.addEventListener("click", () => {
+    featuredTrack.scrollBy({ left: scrollStep(), behavior: "smooth" });
+  });
+}
+
 function createActionLink(className, href, label) {
   const link = document.createElement("a");
   link.className = className;
@@ -140,11 +217,11 @@ function createActionLink(className, href, label) {
   return link;
 }
 
-videos.forEach((videoSrc, index) => {
-  const videoNumber = index + 1;
-
+function createVideoCard(item) {
+  const videoNumber = item.number;
   const card = document.createElement("article");
   card.className = "video-card";
+  card.id = "reel-" + videoNumber;
 
   const container = document.createElement("div");
   container.className = "video-container";
@@ -155,7 +232,7 @@ videos.forEach((videoSrc, index) => {
   video.controls = false;
 
   const source = document.createElement("source");
-  source.src = videoSrc;
+  source.src = item.src;
   source.type = "video/mp4";
   video.appendChild(source);
 
@@ -165,7 +242,7 @@ videos.forEach((videoSrc, index) => {
   const playButton = document.createElement("button");
   playButton.className = "gate-button";
   playButton.type = "button";
-  playButton.setAttribute("aria-label", `Play video ${videoNumber}`);
+  playButton.setAttribute("aria-label", "Play video " + videoNumber);
   playButton.textContent = "▶";
   gate.appendChild(playButton);
 
@@ -178,9 +255,8 @@ videos.forEach((videoSrc, index) => {
 
   container.append(video, gate);
   card.append(container, actions);
-  feed.appendChild(card);
 
-  const storageKey = `masterreposts_unlocked_${videoNumber}`;
+  const storageKey = "masterreposts_unlocked_" + videoNumber;
 
   if (sessionStorage.getItem(storageKey)) {
     gate.classList.add("hidden");
@@ -209,9 +285,93 @@ videos.forEach((videoSrc, index) => {
     track("engagement", { type: "terabox", video: videoNumber });
   });
 
-  const adType = adAfterVideo(videoNumber);
-  if (adType) feed.appendChild(createAdSlot(adType));
+  return card;
+}
+
+function createVastCard(slotId) {
+  const card = document.createElement("article");
+  card.className = "video-card vast-card";
+  card.setAttribute("aria-label", "Sponsored video");
+
+  const badge = document.createElement("p");
+  badge.className = "vast-badge";
+  badge.textContent = "Sponsored";
+
+  const container = document.createElement("div");
+  container.className = "video-container";
+
+  const video = document.createElement("video");
+  video.preload = "none";
+  video.playsInline = true;
+  video.controls = false;
+  video.setAttribute("playsinline", "");
+
+  const gate = document.createElement("div");
+  gate.className = "play-gate";
+
+  const playButton = document.createElement("button");
+  playButton.className = "gate-button";
+  playButton.type = "button";
+  playButton.setAttribute("aria-label", "Play sponsored video");
+  playButton.textContent = "▶";
+  gate.appendChild(playButton);
+
+  const skip = document.createElement("button");
+  skip.className = "vast-skip";
+  skip.type = "button";
+  skip.hidden = true;
+  skip.textContent = "Skip";
+
+  const bar = document.createElement("div");
+  bar.className = "vast-progress";
+  bar.appendChild(document.createElement("span"));
+
+  container.append(video, gate, skip, bar);
+
+  const meta = document.createElement("div");
+  meta.className = "vast-meta";
+
+  const status = document.createElement("span");
+  status.className = "vast-status";
+  status.textContent = "VAST Video";
+
+  const more = document.createElement("a");
+  more.className = "vast-more";
+  more.href = "#";
+  more.target = "_blank";
+  more.rel = "noopener noreferrer sponsored";
+  more.hidden = true;
+  more.textContent = "Learn more";
+
+  meta.append(status, more);
+  card.append(badge, container, meta);
+
+  if (window.VastPlayer && typeof window.VastPlayer.mount === "function") {
+    window.VastPlayer.mount(card, vastTagUrl, slotId);
+  }
+
+  return card;
+}
+
+const feedItems = buildFeedItems();
+let vastSlot = 0;
+
+feedItems.forEach((item) => {
+  if (item.type === "video") {
+    feed.appendChild(createVideoCard(item));
+    return;
+  }
+  if (item.type === "vast-ad") {
+    vastSlot += 1;
+    feed.appendChild(createVastCard(vastSlot));
+    return;
+  }
+  if (item.type === "banner" || item.type === "native") {
+    feed.appendChild(createAdSlot(item.type));
+  }
 });
+
+createFeaturedSlider();
 
 document.addEventListener("play", (event) => {
   if (event.target.tagName !== "VIDEO") return;

@@ -32,6 +32,115 @@ body {
   margin-left: 5px;
 }
 
+.featured-section {
+  width: 100%;
+  border-bottom: 1px solid #1a1a1a;
+  background: #000;
+  padding: 16px 10px 18px;
+}
+
+.featured-inner {
+  width: 100%;
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+.featured-inner h2,
+.feed-heading {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  margin: 0 0 12px;
+}
+
+.featured-slider {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.featured-arrow {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #2a2a2a;
+  background: #111;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.featured-arrow:hover { background: #1683ff; border-color: #1683ff; }
+
+.featured-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0 6px;
+}
+
+.featured-track::-webkit-scrollbar { display: none; }
+
+.featured-item {
+  flex: 0 0 118px;
+  aspect-ratio: 9 / 16;
+  position: relative;
+  border: 1px solid #1b1b1b;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  background: #111;
+  cursor: pointer;
+  scroll-snap-align: start;
+  color: #fff;
+}
+
+.featured-item img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background: #111;
+}
+
+.featured-item.no-poster {
+  background: linear-gradient(180deg, #1a1a1a, #0a0a0a);
+}
+
+.featured-play {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  background: rgba(22, 131, 255, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.featured-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 6px 7px;
+  background: linear-gradient(transparent, rgba(0,0,0,.82));
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .feed {
   width: 100%;
   max-width: 650px;
@@ -46,6 +155,12 @@ body {
   border: 1px solid #1b1b1b;
   border-radius: 12px;
   overflow: hidden;
+  scroll-margin-top: 78px;
+}
+
+.video-card.reel-highlight {
+  outline: 2px solid #1683ff;
+  outline-offset: 2px;
 }
 
 .video-container {
@@ -113,6 +228,86 @@ body {
 
 .action-btn:hover { background: #006de8; }
 
+.vast-card {
+  border-color: #3a3110;
+  background: #0c0a04;
+}
+
+.vast-badge {
+  margin: 0;
+  padding: 8px 12px;
+  text-align: center;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  color: #f5d76e;
+  background: #16120a;
+  border-bottom: 1px solid #3a3110;
+}
+
+.vast-skip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vast-skip:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.vast-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 3;
+}
+
+.vast-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #f5d76e;
+}
+
+.vast-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.vast-status {
+  color: #c8b56a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.vast-more {
+  color: #1683ff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.vast-more:hover { text-decoration: underline; }
+
 .ad-slot {
   width: 100%;
   display: flex;
@@ -165,6 +360,10 @@ footer {
 
 @media (max-width: 600px) {
   .feed { padding: 10px 6px 30px; }
+  .featured-section { padding: 12px 6px 14px; }
+  .featured-item { flex-basis: 102px; }
+  .featured-slider { gap: 6px; grid-template-columns: 32px minmax(0, 1fr) 32px; }
+  .featured-arrow { width: 32px; height: 32px; }
   .video-card { border-radius: 8px; margin-bottom: 22px; }
   .video-actions { gap: 8px; padding: 10px; }
   .action-btn { min-height: 44px; font-size: 12px; }
