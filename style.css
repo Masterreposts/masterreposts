@@ -93,7 +93,7 @@ body {
 .video-actions {
   display: flex;
   gap: 10px;
-  padding: 12px 12px 0;
+  padding: 12px;
 }
 
 .action-btn {
@@ -112,27 +112,6 @@ body {
 }
 
 .action-btn:hover { background: #006de8; }
-
-.sponsored-row {
-  padding: 8px 12px 12px;
-  text-align: center;
-}
-
-.sponsored-btn {
-  display: inline-block;
-  color: #9aa3ad;
-  font-size: 12px;
-  text-decoration: none;
-  border: 1px solid #2a2a2a;
-  border-radius: 999px;
-  padding: 6px 12px;
-  background: #111;
-}
-
-.sponsored-btn:hover {
-  color: #d0d4d8;
-  border-color: #444;
-}
 
 .ad-slot {
   width: 100%;
@@ -187,7 +166,7 @@ footer {
 @media (max-width: 600px) {
   .feed { padding: 10px 6px 30px; }
   .video-card { border-radius: 8px; margin-bottom: 22px; }
-  .video-actions { gap: 8px; padding: 10px 10px 0; }
+  .video-actions { gap: 8px; padding: 10px; }
   .action-btn { min-height: 44px; font-size: 12px; }
   .banner-frame { transform-origin: top center; }
 }

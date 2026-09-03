@@ -36,9 +36,16 @@ const sophonLink = "https://link.newsophon.com/l/MaBdE";
 const teraboxLink = "https://www.teraboxpage.com/myknow/toponlyfans";
 
 /*
- Provider-approved SmartLink placement.
- These are only used on a clearly labelled Sponsored / Discover control.
- They are never opened from play, autoplay, scroll, timers, or page load.
+ SMART LINK CONFIGURATION
+
+ Video numbering:
+ Odd:  1,3,5,7,9,...
+ Even: 2,4,6,8,10,...
+
+ Play gate:
+ - Runs once per video per browser session.
+ - Opens the configured destination from a user click.
+ - Unlocks the original video immediately.
 */
 const smartLinks = {
   odd: "https://throbexhaust.com/vgusrr8nh?key=445ee6281e211e301ffe67b67cbf8d68",
@@ -169,22 +176,25 @@ videos.forEach((videoSrc, index) => {
   const terabox = createActionLink("action-btn", teraboxLink, "Watch on Terabox");
   actions.append(sophon, terabox);
 
-  const sponsoredWrap = document.createElement("div");
-  sponsoredWrap.className = "sponsored-row";
-
-  const sponsored = createActionLink(
-    "sponsored-btn",
-    getSmartLink(videoNumber),
-    "Sponsored · Discover"
-  );
-  sponsored.setAttribute("rel", "noopener noreferrer sponsored");
-  sponsoredWrap.appendChild(sponsored);
-
   container.append(video, gate);
-  card.append(container, actions, sponsoredWrap);
+  card.append(container, actions);
   feed.appendChild(card);
 
+  const storageKey = `masterreposts_unlocked_${videoNumber}`;
+
+  if (sessionStorage.getItem(storageKey)) {
+    gate.classList.add("hidden");
+    video.controls = true;
+  }
+
   playButton.addEventListener("click", () => {
+    if (!sessionStorage.getItem(storageKey)) {
+      const destination = getSmartLink(videoNumber);
+      window.open(destination, "_blank", "noopener");
+      sessionStorage.setItem(storageKey, "true");
+      track("engagement", { type: "smartlink", video: videoNumber });
+    }
+
     gate.classList.add("hidden");
     video.controls = true;
     video.play().catch(() => {});
@@ -197,10 +207,6 @@ videos.forEach((videoSrc, index) => {
 
   terabox.addEventListener("click", () => {
     track("engagement", { type: "terabox", video: videoNumber });
-  });
-
-  sponsored.addEventListener("click", () => {
-    track("engagement", { type: "sponsored", video: videoNumber });
   });
 
   const adType = adAfterVideo(videoNumber);

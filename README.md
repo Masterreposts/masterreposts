@@ -12,10 +12,12 @@ A lightweight black Reel-style video website designed for deployment on GitHub P
 - Two blue buttons below every video
   - Watch on Sophon
   - Watch on Terabox
-- Play control plays the video only
+- Alternating play-gate configuration
+- Odd-numbered videos use SmartLink A
+- Even-numbered videos use SmartLink B
+- Session-based unlock state
 - Clearly labelled Advertisement slots (native banner and 300×250)
 - Adsterra Social Bar loaded once, before `</body>`
-- Optional labelled Sponsored / Discover link, separate from play and watch buttons
 - First-party analytics: timezone/country proxy, device, referrer, engagement
 - Only one video plays at a time
 - Mobile responsive
@@ -51,18 +53,25 @@ The JavaScript expects:
 
 You can rename or change the list inside `script.js`.
 
-## Traffic protection
+## Play-Gate Logic
 
-Built-in rules:
+The configured logic is:
 
-1. Never auto-open SmartLinks. There is no `window.open` on page load, scroll, autoplay, timers, or random clicks.
-2. The play button plays the video. It does not open an advertisement.
-3. Ads sit in labelled slots, separated from content.
-4. SmartLinks are only used on a clearly labelled **Sponsored · Discover** control.
+| Video | SmartLink Group |
+|---|---|
+| Odd-numbered videos (1, 3, 5, ...) | Odd |
+| Even-numbered videos (2, 4, 6, ...) | Even |
 
-Visitor flow:
+Flow:
 
-Visitor arrives → native banner → video plays normally → labelled ad slot → optional labelled sponsored link → next video
+1. Visitor sees a play overlay.
+2. Visitor clicks the play button.
+3. The configured destination is opened from that user interaction.
+4. The video is unlocked.
+5. The video attempts to start playing.
+6. The unlock is remembered for the current browser session.
+
+SmartLinks are not auto-opened on page load, scroll, autoplay, or timers. They open only from the play click, once per video per session.
 
 ## Ad schedule
 
@@ -84,13 +93,7 @@ Paste the masterreposts.xyz **300×250_1 Get Code** key into `ads/banner-300x250
 - Native banner: Adsterra container `e02a3877d8ff4a051ec557717047de62`
 - 300×250: isolated iframe, labelled Advertisement
 - Social Bar: official script immediately before `</body>`
-- SmartLink: labelled Sponsored / Discover only
-
-Do not:
-
-- Automatically trigger redirects
-- Disguise advertisements as browser or video controls
-- Count play clicks as ad clicks
+- SmartLink: odd/even destinations from the play button, once per video per session
 
 ## Deploying to GitHub Pages
 
