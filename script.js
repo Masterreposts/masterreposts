@@ -55,7 +55,7 @@ const smartLinks = {
 const ads = {
   nativeSrc: "ads/native.html",
   bannerSrc: "ads/banner-300x250.html",
-  bannerKey: "REPLACE_MASTERREPOSTS_300x250_KEY"
+  bannerKey: "2449fe80e47d997db552"
 };
 
 const vastTagUrl = "https://direct-league.com/dWmLF.z/dTGmNLvHZZGqUB/vepmJ9wuRZfUllxkhP/T/crzZOwDJE/0mMUDJUet/NYzMM/4/MlTfQnw/OWSNZGsOaBW_1Yp-dCDl0FxJ";

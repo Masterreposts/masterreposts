@@ -86,7 +86,7 @@ Repeats every 10 videos:
 
 In-feed ads load inside isolated iframes (`ads/native.html`, `ads/banner-300x250.html`) so Adsterra `document.write` tags cannot replace the page.
 
-Paste the masterreposts.xyz **300×250_1 Get Code** key into `ads/banner-300x250.html` if the current key placeholder still needs replacing.
+The masterreposts.xyz **300×250_1** zone is configured in `ads/banner-300x250.html`.
 
 ## Ad Placements
 
