@@ -514,19 +514,7 @@
       playAd();
     });
 
-    if ("IntersectionObserver" in window) {
-      var observer = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) {
-            loadAd().catch(function () {});
-            observer.disconnect();
-          }
-        });
-      }, { rootMargin: "400px 0px", threshold: 0.01 });
-      observer.observe(card);
-    } else {
-      loadAd().catch(function () {});
-    }
+    loadAd().catch(function () {});
 
     card.dataset.vastSlot = String(slotId);
   }

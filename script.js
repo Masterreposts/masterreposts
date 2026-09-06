@@ -129,7 +129,6 @@ function createAdSlot(type) {
   const frame = document.createElement("iframe");
   frame.className = type === "banner" ? "banner-frame" : "native-frame";
   frame.title = "Advertisement";
-  frame.loading = "lazy";
   frame.setAttribute("scrolling", "no");
   frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
 
@@ -165,7 +164,6 @@ function createFeaturedSlider() {
     const thumb = document.createElement("img");
     thumb.src = posterSrc(videoNumber);
     thumb.alt = "Video " + videoNumber;
-    thumb.loading = "lazy";
     thumb.decoding = "async";
     thumb.addEventListener("error", () => {
       thumb.remove();
@@ -241,21 +239,15 @@ function createVideoCard(item) {
   const container = document.createElement("div");
   container.className = "video-container";
 
-  const video = document.createElement("video");
-  video.preload = "none";
+    const video = document.createElement("video");
+    video.preload = "auto";
   video.playsInline = true;
   video.controls = false;
 
   const source = document.createElement("source");
-  source.dataset.src = item.src;
+  source.src = item.src;
   source.type = "video/mp4";
   video.appendChild(source);
-
-  function loadVideoSource() {
-    if (source.src) return;
-    source.src = source.dataset.src;
-    video.load();
-  }
 
   const gate = document.createElement("div");
   gate.className = "play-gate";
@@ -280,7 +272,6 @@ function createVideoCard(item) {
   const storageKey = "masterreposts_unlocked_" + videoNumber;
 
   if (sessionStorage.getItem(storageKey)) {
-    loadVideoSource();
     gate.classList.add("hidden");
     video.controls = true;
   }
@@ -293,7 +284,6 @@ function createVideoCard(item) {
       track("engagement", { type: "smartlink_click", video: videoNumber });
     }
 
-    loadVideoSource();
     gate.classList.add("hidden");
     video.controls = true;
     video.play().then(() => {
@@ -312,8 +302,6 @@ function createVideoCard(item) {
     track("engagement", { type: "terabox", video: videoNumber });
   });
 
-  card.loadVideoSource = loadVideoSource;
-
   return card;
 }
 
@@ -329,8 +317,8 @@ function createVastCard(slotId) {
   const container = document.createElement("div");
   container.className = "video-container";
 
-  const video = document.createElement("video");
-  video.preload = "none";
+    const video = document.createElement("video");
+    video.preload = "auto";
   video.playsInline = true;
   video.controls = false;
   video.setAttribute("playsinline", "");
@@ -399,24 +387,6 @@ feedItems.forEach((item) => {
     feed.appendChild(createAdSlot(item.type));
   }
 });
-
-if ("IntersectionObserver" in window) {
-  const videoObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (!entry.isIntersecting) return;
-      const loadVideo = entry.target.loadVideoSource;
-      if (loadVideo) {
-        loadVideo();
-      }
-      videoObserver.unobserve(entry.target);
-    });
-  }, { rootMargin: "600px 0px", threshold: 0.01 });
-
-  document.querySelectorAll(".video-card").forEach((card) => {
-    if (!card.loadVideoSource) return;
-    videoObserver.observe(card);
-  });
-}
 
 createFeaturedSlider();
 
