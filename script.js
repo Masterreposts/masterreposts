@@ -217,6 +217,21 @@ function createActionLink(className, href, label) {
   return link;
 }
 
+function openSmartLink(url) {
+  const popup = window.open(url, "_blank");
+  if (popup) {
+    try {
+      popup.opener = null;
+    } catch (err) {
+      // Some browsers expose the new tab as read-only.
+    }
+    return true;
+  }
+
+  window.location.assign(url);
+  return false;
+}
+
 function createVideoCard(item) {
   const videoNumber = item.number;
   const card = document.createElement("article");
@@ -227,14 +242,20 @@ function createVideoCard(item) {
   container.className = "video-container";
 
   const video = document.createElement("video");
-  video.preload = "metadata";
+  video.preload = "none";
   video.playsInline = true;
   video.controls = false;
 
   const source = document.createElement("source");
-  source.src = item.src;
+  source.dataset.src = item.src;
   source.type = "video/mp4";
   video.appendChild(source);
+
+  function loadVideoSource() {
+    if (source.src) return;
+    source.src = source.dataset.src;
+    video.load();
+  }
 
   const gate = document.createElement("div");
   gate.className = "play-gate";
@@ -259,6 +280,7 @@ function createVideoCard(item) {
   const storageKey = "masterreposts_unlocked_" + videoNumber;
 
   if (sessionStorage.getItem(storageKey)) {
+    loadVideoSource();
     gate.classList.add("hidden");
     video.controls = true;
   }
@@ -266,15 +288,20 @@ function createVideoCard(item) {
   playButton.addEventListener("click", () => {
     if (!sessionStorage.getItem(storageKey)) {
       const destination = getSmartLink(videoNumber);
-      window.open(destination, "_blank", "noopener");
+      openSmartLink(destination);
       sessionStorage.setItem(storageKey, "true");
-      track("engagement", { type: "smartlink", video: videoNumber });
+      track("engagement", { type: "smartlink_click", video: videoNumber });
     }
 
+    loadVideoSource();
     gate.classList.add("hidden");
     video.controls = true;
-    video.play().catch(() => {});
-    track("engagement", { type: "play", video: videoNumber });
+    video.play().then(() => {
+      track("engagement", { type: "play", video: videoNumber });
+    }).catch(() => {
+      gate.classList.remove("hidden");
+      track("engagement", { type: "play_error", video: videoNumber });
+    });
   });
 
   sophon.addEventListener("click", () => {
@@ -284,6 +311,8 @@ function createVideoCard(item) {
   terabox.addEventListener("click", () => {
     track("engagement", { type: "terabox", video: videoNumber });
   });
+
+  card.loadVideoSource = loadVideoSource;
 
   return card;
 }
@@ -371,7 +400,41 @@ feedItems.forEach((item) => {
   }
 });
 
+if ("IntersectionObserver" in window) {
+  const videoObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const loadVideo = entry.target.loadVideoSource;
+      if (loadVideo) {
+        loadVideo();
+      }
+      videoObserver.unobserve(entry.target);
+    });
+  }, { rootMargin: "600px 0px", threshold: 0.01 });
+
+  document.querySelectorAll(".video-card").forEach((card) => {
+    if (!card.loadVideoSource) return;
+    videoObserver.observe(card);
+  });
+}
+
 createFeaturedSlider();
+
+(function placeFeaturedVideoSlider() {
+  const slot = document.getElementById("featured-video-slider");
+  if (!slot) return;
+
+  function relocate() {
+    const player = document.querySelector(".rmp-container");
+    if (player && player.parentElement !== slot) slot.appendChild(player);
+  }
+
+  relocate();
+  new MutationObserver(relocate).observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
 
 document.addEventListener("play", (event) => {
   if (event.target.tagName !== "VIDEO") return;
