@@ -84,7 +84,7 @@ function buildFeedItems() {
   videos.forEach((src, index) => {
     const number = index + 1;
     items.push({ type: "video", src: src, number: number });
-    if (number % 3 === 0) items.push({ type: "vast-ad" });
+    if (number % 6 === 0) items.push({ type: "vast-ad" });
     const slot = adAfterVideo(number);
     if (slot) items.push({ type: slot });
   });
@@ -226,7 +226,6 @@ function openSmartLink(url) {
     return true;
   }
 
-  window.location.assign(url);
   return false;
 }
 
@@ -239,8 +238,8 @@ function createVideoCard(item) {
   const container = document.createElement("div");
   container.className = "video-container";
 
-    const video = document.createElement("video");
-    video.preload = "auto";
+  const video = document.createElement("video");
+  video.preload = "auto";
   video.playsInline = true;
   video.controls = false;
 
@@ -279,7 +278,10 @@ function createVideoCard(item) {
   playButton.addEventListener("click", () => {
     if (!sessionStorage.getItem(storageKey)) {
       const destination = getSmartLink(videoNumber);
-      openSmartLink(destination);
+      if (!openSmartLink(destination)) {
+        track("engagement", { type: "smartlink_blocked", video: videoNumber });
+        return;
+      }
       sessionStorage.setItem(storageKey, "true");
       track("engagement", { type: "smartlink_click", video: videoNumber });
     }
@@ -317,8 +319,8 @@ function createVastCard(slotId) {
   const container = document.createElement("div");
   container.className = "video-container";
 
-    const video = document.createElement("video");
-    video.preload = "auto";
+  const video = document.createElement("video");
+  video.preload = "none";
   video.playsInline = true;
   video.controls = false;
   video.setAttribute("playsinline", "");

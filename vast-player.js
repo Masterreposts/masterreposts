@@ -97,14 +97,10 @@
       var resolved = replaceMacros(url, macros || {});
       if (!resolved) return;
       try {
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(resolved);
-          return;
-        }
+        var img = new Image();
+        img.referrerPolicy = "no-referrer-when-downgrade";
+        img.src = resolved;
       } catch (err) {}
-      var img = new Image();
-      img.referrerPolicy = "no-referrer-when-downgrade";
-      img.src = resolved;
     });
   }
 
@@ -376,6 +372,7 @@
     var tracker = null;
     var started = false;
     var skipAt = null;
+    var clickThrough = "";
 
     function setStatus(text) {
       if (status) status.textContent = text || "";
@@ -405,6 +402,7 @@
         }
         tracker = createTracker(ad);
         skipAt = skipSeconds(ad.linear.skipoffset, ad.linear.duration);
+        clickThrough = ad.linear.clickThrough || "";
         video.src = media.url;
         if (moreBtn && ad.linear.clickThrough) {
           moreBtn.hidden = false;
@@ -496,13 +494,10 @@
     }
 
     function handleClickThrough(event) {
-      if (!loaded || !loaded.then) return;
-      loaded.then(function (ad) {
-        if (!ad || !ad.linear.clickThrough) return;
-        if (tracker) tracker.click(macrosAt(video.currentTime));
-        window.open(ad.linear.clickThrough, "_blank", "noopener");
-      });
-      if (event) event.preventDefault();
+      if (!tracker || !loaded || !loaded.then) return;
+      if (tracker) tracker.click(macrosAt(video.currentTime));
+      if (event && event.currentTarget === moreBtn) return;
+      if (clickThrough) window.open(clickThrough, "_blank");
     }
 
     if (moreBtn) moreBtn.addEventListener("click", handleClickThrough);
@@ -514,7 +509,18 @@
       playAd();
     });
 
-    loadAd().catch(function () {});
+    if ("IntersectionObserver" in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          loadAd().catch(function () {});
+          observer.disconnect();
+        });
+      }, { rootMargin: "400px 0px", threshold: 0.01 });
+      observer.observe(card);
+    } else {
+      loadAd().catch(function () {});
+    }
 
     card.dataset.vastSlot = String(slotId);
   }

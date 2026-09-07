@@ -75,7 +75,7 @@ SmartLinks are not auto-opened on page load, scroll, autoplay, or timers. They o
 
 ## Ad schedule
 
-Repeats every 10 videos:
+Display slots repeat every 10 videos:
 
 | After video | Slot |
 |---|---|
@@ -86,6 +86,8 @@ Repeats every 10 videos:
 
 In-feed ads load inside isolated iframes (`ads/native.html`, `ads/banner-300x250.html`) so Adsterra `document.write` tags cannot replace the page.
 
+VAST sponsored cards are inserted after every sixth video and request their VAST tag only when the card is near the viewport. VAST impressions and quartile events are sent as image-pixel GET requests after real playback events.
+
 The masterreposts.xyz **300×250_1** zone is configured in `ads/banner-300x250.html`.
 
 ## Ad Placements
@@ -94,6 +96,7 @@ The masterreposts.xyz **300×250_1** zone is configured in `ads/banner-300x250.h
 - 300×250: isolated iframe, labelled Advertisement
 - Social Bar: official script immediately before `</body>`
 - SmartLink: odd/even destinations from the play button, once per video per session
+- VAST: lazy request near the viewport, user-initiated playback, image-pixel tracking
 
 ## Deploying to GitHub Pages
 
