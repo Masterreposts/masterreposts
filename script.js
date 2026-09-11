@@ -44,7 +44,9 @@ const teraboxLink = "https://www.teraboxpage.com/myknow/toponlyfans";
 
  Play gate:
  - Runs once per video per browser session.
- - Opens the configured destination from a user click.
+ - Opens the configured destination from a user click
+   via a real <a href> so the advertiser can count it.
+ - Videos 3, 6, 9, 12, 15, 18 play with no SmartLink.
  - Unlocks the original video immediately.
 */
 const smartLinks = {
@@ -58,15 +60,22 @@ const ads = {
   bannerKey: "2449fe80e47d997db552"
 };
 
+const ungatedVideos = new Set([3, 6, 9, 12, 15, 18]);
+
 const vastTagUrl = "https://direct-league.com/dWmLF.z/dTGmNLvHZZGqUB/vepmJ9wuRZfUllxkhP/T/crzZOwDJE/0mMUDJUet/NYzMM/4/MlTfQnw/OWSNZGsOaBW_1Yp-dCDl0FxJ";
 
 const featuredCount = 10;
 const feed = document.getElementById("video-feed");
+const analyticsKey = "masterreposts_daily_metrics";
 
 function getSmartLink(videoNumber) {
   return videoNumber % 2 === 1
     ? smartLinks.odd
     : smartLinks.even;
+}
+
+function usesSmartLink(videoNumber) {
+  return !ungatedVideos.has(videoNumber);
 }
 
 /* Repeating 10-video ad schedule:
@@ -104,6 +113,86 @@ function collectContext() {
   };
 }
 
+function readStoredMetrics() {
+  try {
+    const raw = localStorage.getItem(analyticsKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function writeStoredMetrics(metrics) {
+  try {
+    localStorage.setItem(analyticsKey, JSON.stringify(metrics));
+  } catch (err) {
+    // Analytics must never affect playback or ad loading.
+  }
+}
+
+function formatMetricDate(dateValue) {
+  if (!dateValue) return "";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
+function aggregateRevenue(impressions, clicks) {
+  return Number((impressions * 0.0008 + clicks * 0.004).toFixed(4));
+}
+
+function renderMetricsTable() {
+  const table = document.getElementById("daily-metrics");
+  if (!table) return;
+
+  const rows = Object.entries(readStoredMetrics())
+    .map(([dateKey, values]) => {
+      const impressions = Number(values && values.impressions ? values.impressions : 0);
+      const clicks = Number(values && values.clicks ? values.clicks : 0);
+      const revenue = Number(values && values.revenue ? values.revenue : aggregateRevenue(impressions, clicks));
+      return { dateKey, impressions, clicks, revenue };
+    })
+    .sort((a, b) => new Date(b.dateKey) - new Date(a.dateKey))
+    .slice(0, 7);
+
+  const body = table.querySelector("tbody");
+  if (!body) return;
+
+  body.innerHTML = rows.length
+    ? rows.map((row) => `
+        <tr>
+          <td>${formatMetricDate(row.dateKey)}</td>
+          <td>${row.impressions}</td>
+          <td>${row.clicks}</td>
+          <td>$${row.revenue.toFixed(4)}</td>
+        </tr>
+      `).join("")
+    : '<tr><td colspan="4">No metric data yet.</td></tr>';
+}
+
+function incrementMetric(kind) {
+  if (!window.localStorage) return;
+  try {
+    const metrics = readStoredMetrics();
+    const dateKey = new Date().toISOString().slice(0, 10);
+    const current = metrics[dateKey] || { impressions: 0, clicks: 0, revenue: 0 };
+
+    if (kind === "impression") current.impressions = Number(current.impressions || 0) + 1;
+    if (kind === "click") current.clicks = Number(current.clicks || 0) + 1;
+    current.revenue = aggregateRevenue(current.impressions, current.clicks);
+    metrics[dateKey] = current;
+    writeStoredMetrics(metrics);
+    renderMetricsTable();
+  } catch (err) {
+    // Analytics must never affect playback or ad loading.
+  }
+}
+
 function track(eventName, extra) {
   const entry = Object.assign({ event: eventName }, collectContext(), extra || {});
   try {
@@ -113,6 +202,14 @@ function track(eventName, extra) {
     sessionStorage.setItem(key, JSON.stringify(existing.slice(-80)));
   } catch (err) {
     // Analytics must never affect playback or ad loading.
+  }
+
+  const normalized = (extra && extra.type) || eventName;
+  if (normalized === "impression" || normalized === "ad_iframe" || normalized === "vast") {
+    incrementMetric("impression");
+  }
+  if (normalized === "click" || normalized === "smartlink_click" || normalized === "featured" || normalized === "play" || normalized === "sophon" || normalized === "terabox") {
+    incrementMetric("click");
   }
 }
 
@@ -130,15 +227,48 @@ function createAdSlot(type) {
   frame.className = type === "banner" ? "banner-frame" : "native-frame";
   frame.title = "Advertisement";
   frame.setAttribute("scrolling", "no");
+  frame.referrerPolicy = "no-referrer-when-downgrade";
   frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
+  frame.setAttribute("allow", "attribution-reporting; fullscreen");
+  frame.loading = "eager";
 
   if (type === "banner") {
     frame.width = "300";
     frame.height = "250";
     frame.src = ads.bannerSrc;
   } else {
+    frame.width = "100%";
+    frame.height = "400";
     frame.src = ads.nativeSrc;
   }
+
+  frame.addEventListener("load", () => {
+    try {
+      const doc = frame.contentDocument;
+      track("impression", { type: "ad_iframe", slot: type });
+      if (!doc) return;
+      const resize = () => {
+        const body = doc.body;
+        const rootEl = doc.documentElement;
+        const height = Math.max(
+          body ? body.scrollHeight : 0,
+          rootEl ? rootEl.scrollHeight : 0,
+          type === "banner" ? 250 : 280
+        );
+        if (height > 0) frame.style.height = height + "px";
+      };
+      resize();
+      if (doc.body) {
+        new MutationObserver(resize).observe(doc.body, {
+          childList: true,
+          subtree: true,
+          attributes: true
+        });
+      }
+    } catch (err) {
+      // Cross-origin nested ad frames are expected; parent document is same-origin.
+    }
+  });
 
   section.appendChild(frame);
   return section;
@@ -216,6 +346,8 @@ function createActionLink(className, href, label) {
 }
 
 function openSmartLink(url) {
+  if (!url) return false;
+
   const popup = window.open(url, "_blank");
   if (popup) {
     try {
@@ -226,7 +358,15 @@ function openSmartLink(url) {
     return true;
   }
 
-  return false;
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return true;
 }
 
 function createVideoCard(item) {
@@ -248,14 +388,21 @@ function createVideoCard(item) {
   source.type = "video/mp4";
   video.appendChild(source);
 
+  const gated = usesSmartLink(videoNumber);
   const gate = document.createElement("div");
   gate.className = "play-gate";
 
-  const playButton = document.createElement("button");
+  const playButton = gated ? document.createElement("a") : document.createElement("button");
   playButton.className = "gate-button";
-  playButton.type = "button";
   playButton.setAttribute("aria-label", "Play video " + videoNumber);
   playButton.textContent = "▶";
+  if (gated) {
+    playButton.href = getSmartLink(videoNumber);
+    playButton.target = "_blank";
+    playButton.rel = "noopener";
+  } else {
+    playButton.type = "button";
+  }
   gate.appendChild(playButton);
 
   const actions = document.createElement("div");
@@ -275,21 +422,25 @@ function createVideoCard(item) {
     video.controls = true;
   }
 
-  playButton.addEventListener("click", () => {
-    if (!sessionStorage.getItem(storageKey)) {
-      const destination = getSmartLink(videoNumber);
-      if (!openSmartLink(destination)) {
-        track("engagement", { type: "smartlink_blocked", video: videoNumber });
-        return;
-      }
+  playButton.addEventListener("click", (event) => {
+    const alreadyUnlocked = !!sessionStorage.getItem(storageKey);
+
+    if (gated && !alreadyUnlocked) {
       sessionStorage.setItem(storageKey, "true");
       track("engagement", { type: "smartlink_click", video: videoNumber });
+      track("click", { type: "smartlink_click", video: videoNumber });
+      if (playButton.tagName !== "A") {
+        openSmartLink(getSmartLink(videoNumber));
+      }
+    } else if (playButton.tagName === "A") {
+      event.preventDefault();
     }
 
     gate.classList.add("hidden");
     video.controls = true;
     video.play().then(() => {
       track("engagement", { type: "play", video: videoNumber });
+      track("click", { type: "play", video: videoNumber });
     }).catch(() => {
       gate.classList.remove("hidden");
       track("engagement", { type: "play_error", video: videoNumber });
@@ -298,10 +449,12 @@ function createVideoCard(item) {
 
   sophon.addEventListener("click", () => {
     track("engagement", { type: "sophon", video: videoNumber });
+    track("click", { type: "sophon", video: videoNumber });
   });
 
   terabox.addEventListener("click", () => {
     track("engagement", { type: "terabox", video: videoNumber });
+    track("click", { type: "terabox", video: videoNumber });
   });
 
   return card;
@@ -358,7 +511,7 @@ function createVastCard(slotId) {
   more.className = "vast-more";
   more.href = "#";
   more.target = "_blank";
-  more.rel = "noopener noreferrer sponsored";
+  more.rel = "noopener sponsored";
   more.hidden = true;
   more.textContent = "Learn more";
 

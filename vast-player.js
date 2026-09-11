@@ -35,7 +35,17 @@
 
   function deepNamed(parent, name) {
     if (!parent) return [];
-    return Array.prototype.slice.call(parent.getElementsByTagName(name));
+    // HilltopAds / many VAST tags set a default xmlns. getElementsByTagName(name)
+    // on a text/xml document then misses every node. Search by local name instead.
+    if (parent.getElementsByTagNameNS) {
+      return Array.prototype.slice.call(parent.getElementsByTagNameNS("*", name));
+    }
+    var fallback = [];
+    var all = parent.getElementsByTagName("*");
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].localName === name) fallback.push(all[i]);
+    }
+    return fallback;
   }
 
   function attr(node, name) {
@@ -92,10 +102,20 @@
     }
   }
 
+  function httpsUrl(url) {
+    if (!url) return url;
+    if (url.indexOf("http://") === 0 && root.location && root.location.protocol === "https:") {
+      return "https://" + url.slice(7);
+    }
+    return url;
+  }
+
   function firePixels(urls, macros) {
     (urls || []).forEach(function (url) {
-      var resolved = replaceMacros(url, macros || {});
+      var resolved = httpsUrl(replaceMacros(url, macros || {}));
       if (!resolved) return;
+      // VAST impression/click trackers are GET pixels. sendBeacon defaults to POST
+      // and is ignored by most ad servers, so only fire GET image beacons.
       try {
         var img = new Image();
         img.referrerPolicy = "no-referrer-when-downgrade";
@@ -133,7 +153,7 @@
       return response.text();
     }).then(function (text) {
       var doc = new DOMParser().parseFromString(text, "text/xml");
-      if (doc.querySelector("parsererror")) {
+      if (deepNamed(doc, "parsererror").length || (doc.documentElement && doc.documentElement.localName === "parsererror")) {
         throw new Error("Invalid VAST XML");
       }
       return doc;
@@ -166,13 +186,14 @@
       tracking[eventName].push(resolveUrl(nodeText(node), baseUrl));
     });
 
+    var videoClicks = firstNamed(linearEl, "VideoClicks") || deepNamed(linearEl, "VideoClicks")[0];
     var clickThrough = resolveUrl(
-      nodeText(firstNamed(firstNamed(linearEl, "VideoClicks"), "ClickThrough")),
+      nodeText(firstNamed(videoClicks, "ClickThrough") || deepNamed(videoClicks, "ClickThrough")[0]),
       baseUrl
     );
-    var clickTracking = childrenNamed(firstNamed(linearEl, "VideoClicks"), "ClickTracking").map(function (node) {
+    var clickTracking = unique(deepNamed(videoClicks, "ClickTracking").map(function (node) {
       return resolveUrl(nodeText(node), baseUrl);
-    });
+    }));
 
     return {
       duration: parseDuration(nodeText(firstNamed(linearEl, "Duration"))),
@@ -190,12 +211,12 @@
     var root = inline || wrapper;
     if (!root) return null;
 
-    var impressions = childrenNamed(root, "Impression").map(function (node) {
+    var impressions = unique(deepNamed(root, "Impression").map(function (node) {
       return resolveUrl(nodeText(node), baseUrl);
-    });
-    var errors = childrenNamed(root, "Error").map(function (node) {
+    }));
+    var errors = unique(deepNamed(root, "Error").map(function (node) {
       return resolveUrl(nodeText(node), baseUrl);
-    });
+    }));
     var linearEl = deepNamed(root, "Linear")[0] || null;
     var linear = linearEl ? parseLinear(linearEl, baseUrl) : {
       duration: 0,
@@ -209,7 +230,7 @@
     return {
       id: attr(adEl, "id"),
       isWrapper: !!wrapper,
-      wrapperUrl: wrapper ? resolveUrl(nodeText(firstNamed(wrapper, "VASTAdTagURI")), baseUrl) : "",
+      wrapperUrl: wrapper ? resolveUrl(nodeText(firstNamed(wrapper, "VASTAdTagURI") || deepNamed(wrapper, "VASTAdTagURI")[0]), baseUrl) : "",
       impressions: impressions,
       errors: errors,
       linear: linear
@@ -371,6 +392,7 @@
     var loaded = null;
     var tracker = null;
     var started = false;
+    var impressionSent = false;
     var skipAt = null;
     var clickThrough = "";
 
@@ -407,6 +429,7 @@
         if (moreBtn && ad.linear.clickThrough) {
           moreBtn.hidden = false;
           moreBtn.href = ad.linear.clickThrough;
+          moreBtn.rel = "noopener sponsored";
         }
         setStatus("Sponsored");
         return ad;
@@ -432,12 +455,25 @@
       });
     }
 
-    video.addEventListener("playing", function () {
-      if (started) return;
-      started = true;
+    function markImpression() {
+      if (impressionSent || !tracker) return;
+      impressionSent = true;
       var now = macrosAt(video.currentTime);
+      if (window && window.track) {
+        window.track("impression", { type: "vast", slot: card.dataset.vastSlot || "unknown" });
+      }
       tracker.impression(now);
-      tracker.event("start", now);
+    }
+
+    video.addEventListener("loadeddata", function () {
+      if (gate.classList.contains("hidden")) markImpression();
+    });
+
+    video.addEventListener("playing", function () {
+      markImpression();
+      if (started || !tracker) return;
+      started = true;
+      tracker.event("start", macrosAt(video.currentTime));
     });
 
     video.addEventListener("timeupdate", function () {
@@ -494,15 +530,26 @@
     }
 
     function handleClickThrough(event) {
-      if (!tracker || !loaded || !loaded.then) return;
       if (tracker) tracker.click(macrosAt(video.currentTime));
-      if (event && event.currentTarget === moreBtn) return;
-      if (clickThrough) window.open(clickThrough, "_blank");
+      if (event && moreBtn && event.currentTarget === moreBtn) return;
+      if (!clickThrough) return;
+      if (event) event.preventDefault();
+      var opened = window.open(clickThrough, "_blank");
+      if (!opened) {
+        var link = document.createElement("a");
+        link.href = clickThrough;
+        link.target = "_blank";
+        link.rel = "noopener sponsored";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
     }
 
     if (moreBtn) moreBtn.addEventListener("click", handleClickThrough);
-    video.addEventListener("click", function () {
-      if (started && !video.paused) handleClickThrough();
+    video.addEventListener("click", function (event) {
+      if (started && !video.paused) handleClickThrough(event);
     });
 
     gate.querySelector(".gate-button").addEventListener("click", function () {

@@ -15,6 +15,7 @@ A lightweight black Reel-style video website designed for deployment on GitHub P
 - Alternating play-gate configuration
 - Odd-numbered videos use SmartLink A
 - Even-numbered videos use SmartLink B
+- Videos 3, 6, 9, 12, 15, 18 play with no SmartLink gate
 - Session-based unlock state
 - Clearly labelled Advertisement slots (native banner and 300×250)
 - Adsterra Social Bar loaded once, before `</body>`
@@ -59,19 +60,20 @@ The configured logic is:
 
 | Video | SmartLink Group |
 |---|---|
-| Odd-numbered videos (1, 3, 5, ...) | Odd |
-| Even-numbered videos (2, 4, 6, ...) | Even |
+| Odd-numbered videos (1, 5, 7, 11, ...) | Odd |
+| Even-numbered videos (2, 4, 8, 10, ...) | Even |
+| 3, 6, 9, 12, 15, 18 | None (play overlay only) |
 
 Flow:
 
 1. Visitor sees a play overlay.
 2. Visitor clicks the play button.
-3. The configured destination is opened from that user interaction.
+3. For gated videos, the play control is a real link so the advertiser records the click, then the destination opens in a new tab.
 4. The video is unlocked.
 5. The video attempts to start playing.
 6. The unlock is remembered for the current browser session.
 
-SmartLinks are not auto-opened on page load, scroll, autoplay, or timers. They open only from the play click, once per video per session.
+SmartLinks are not auto-opened on page load, scroll, autoplay, or timers. They open only from the play click, once per video per session. Videos 3, 6, 9, 12, 15 and 18 skip the SmartLink and play immediately from the overlay.
 
 ## Ad schedule
 
@@ -95,8 +97,8 @@ The masterreposts.xyz **300×250_1** zone is configured in `ads/banner-300x250.h
 - Native banner: Adsterra container `e02a3877d8ff4a051ec557717047de62`
 - 300×250: isolated iframe, labelled Advertisement
 - Social Bar: official script immediately before `</body>`
-- SmartLink: odd/even destinations from the play button, once per video per session
-- VAST: lazy request near the viewport, user-initiated playback, image-pixel tracking
+- SmartLink: odd/even destinations from the play button, once per video per session (skipped on videos 3, 6, 9, 12, 15, 18)
+- VAST: lazy request near the viewport, user-initiated playback, GET image-pixel impressions and clicks
 
 ## Deploying to GitHub Pages
 
