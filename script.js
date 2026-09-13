@@ -39,28 +39,29 @@ const teraboxLink = "https://www.teraboxpage.com/myknow/toponlyfans";
  SMART LINK CONFIGURATION
 
  Video numbering:
- Odd:  1,3,5,7,9,...
- Even: 2,4,6,8,10,...
+ Odd:  1,5,9,13,...  → Adsterra Direct Link
+ Even: 2,6,10,14,... → Monetag Direct Link
 
  Play gate:
  - Runs once per video per browser session.
- - Opens the configured destination from a user click
-   via a real <a href> so the advertiser can count it.
- - Videos 3, 6, 9, 12, 15, 18 play with no SmartLink.
- - Unlocks the original video immediately.
+ - The whole overlay is a real <a target="_blank"> so Monetag and
+   Adsterra count a user-initiated navigation (not window.open).
+ - Pattern 3,4,7,8,11,12,15,16,19,20,... plays with no SmartLink
+   (videoNumber % 4 === 0 or === 3).
+ - First gated tap opens the SmartLink and unlocks; playback is not
+   requested in the same gesture so the new tab is not treated as a popup.
 */
 const smartLinks = {
   odd: "https://throbexhaust.com/vgusrr8nh?key=445ee6281e211e301ffe67b67cbf8d68",
-  even: "https://omg10.com/4/9288526"
+  even: "https://omg10.com/4/9313314"
 };
 
 const ads = {
   nativeSrc: "ads/native.html",
   bannerSrc: "ads/banner-300x250.html",
-  bannerKey: "2449fe80e47d997db552"
+  bannerKey: "2449fe80e47d997db552",
+  nativeId: "e02a3877d8ff4a051ec557717047de62"
 };
-
-const ungatedVideos = new Set([3, 6, 9, 12, 15, 18]);
 
 const vastTagUrl = "https://direct-league.com/dWmLF.z/dTGmNLvHZZGqUB/vepmJ9wuRZfUllxkhP/T/crzZOwDJE/0mMUDJUet/NYzMM/4/MlTfQnw/OWSNZGsOaBW_1Yp-dCDl0FxJ";
 
@@ -75,7 +76,8 @@ function getSmartLink(videoNumber) {
 }
 
 function usesSmartLink(videoNumber) {
-  return !ungatedVideos.has(videoNumber);
+  const bucket = videoNumber % 4;
+  return bucket === 1 || bucket === 2;
 }
 
 /* Repeating 10-video ad schedule:
@@ -208,9 +210,40 @@ function track(eventName, extra) {
   if (normalized === "impression" || normalized === "ad_iframe" || normalized === "vast") {
     incrementMetric("impression");
   }
-  if (normalized === "click" || normalized === "smartlink_click" || normalized === "featured" || normalized === "play" || normalized === "sophon" || normalized === "terabox") {
+  if (normalized === "click" || normalized === "smartlink_click" || normalized === "vast_click" || normalized === "featured" || normalized === "play" || normalized === "sophon" || normalized === "terabox") {
     incrementMetric("click");
   }
+}
+
+window.track = track;
+
+function adFrameHtml(type) {
+  const origin = (window.location.origin || "") + "/";
+  const css =
+    "html,body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}" +
+    "iframe,a,div{pointer-events:auto}";
+
+  if (type === "banner") {
+    return (
+      "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">" +
+      "<meta name=\"referrer\" content=\"origin\">" +
+      "<base href=\"" + origin + "\" target=\"_blank\">" +
+      "<style>" + css + "html,body{width:300px;height:250px}</style></head><body>" +
+      "<script>atOptions={key:\"" + ads.bannerKey + "\",format:\"iframe\",height:250,width:300,params:{}};<\/script>" +
+      "<script data-cfasync=\"false\" src=\"https://throbexhaust.com/" + ads.bannerKey + "/invoke.js\"><\/script>" +
+      "</body></html>"
+    );
+  }
+
+  return (
+    "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">" +
+    "<meta name=\"referrer\" content=\"origin\">" +
+    "<base href=\"" + origin + "\" target=\"_blank\">" +
+    "<style>" + css + "#container-" + ads.nativeId + "{width:100%;min-height:250px}</style></head><body>" +
+    "<script async data-cfasync=\"false\" src=\"https://throbexhaust.com/" + ads.nativeId + "/invoke.js\"><\/script>" +
+    "<div id=\"container-" + ads.nativeId + "\"></div>" +
+    "</body></html>"
+  );
 }
 
 function createAdSlot(type) {
@@ -227,25 +260,30 @@ function createAdSlot(type) {
   frame.className = type === "banner" ? "banner-frame" : "native-frame";
   frame.title = "Advertisement";
   frame.setAttribute("scrolling", "no");
-  frame.referrerPolicy = "no-referrer-when-downgrade";
-  frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
-  frame.setAttribute("allow", "attribution-reporting; fullscreen");
+  frame.setAttribute("frameborder", "0");
+  // origin (not the /ads/*.html path) is what Adsterra/Monetag approve.
+  frame.referrerPolicy = "origin";
+  frame.setAttribute("referrerpolicy", "origin");
+  frame.setAttribute("allow", "attribution-reporting; fullscreen; autoplay");
   frame.loading = "eager";
+  frame.style.pointerEvents = "auto";
 
   if (type === "banner") {
     frame.width = "300";
     frame.height = "250";
-    frame.src = ads.bannerSrc;
   } else {
     frame.width = "100%";
     frame.height = "400";
-    frame.src = ads.nativeSrc;
   }
 
+  let impressionSent = false;
   frame.addEventListener("load", () => {
     try {
+      if (!impressionSent) {
+        impressionSent = true;
+        track("impression", { type: "ad_iframe", slot: type });
+      }
       const doc = frame.contentDocument;
-      track("impression", { type: "ad_iframe", slot: type });
       if (!doc) return;
       const resize = () => {
         const body = doc.body;
@@ -266,11 +304,27 @@ function createAdSlot(type) {
         });
       }
     } catch (err) {
-      // Cross-origin nested ad frames are expected; parent document is same-origin.
+      // Cross-origin nested ad frames are expected; wrapper document is same-origin.
     }
   });
 
   section.appendChild(frame);
+
+  // Write the tag into a same-origin about:blank frame so document.write
+  // cannot clobber the page and script requests send this page as referrer.
+  try {
+    const doc = frame.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(adFrameHtml(type));
+      doc.close();
+    } else {
+      frame.src = type === "banner" ? ads.bannerSrc : ads.nativeSrc;
+    }
+  } catch (err) {
+    frame.src = type === "banner" ? ads.bannerSrc : ads.nativeSrc;
+  }
+
   return section;
 }
 
@@ -340,7 +394,8 @@ function createActionLink(className, href, label) {
   link.className = className;
   link.href = href;
   link.target = "_blank";
-  link.rel = "noopener noreferrer";
+  link.rel = "noopener";
+  link.referrerPolicy = "no-referrer-when-downgrade";
   link.textContent = label;
   return link;
 }
@@ -348,21 +403,15 @@ function createActionLink(className, href, label) {
 function openSmartLink(url) {
   if (!url) return false;
 
-  const popup = window.open(url, "_blank");
-  if (popup) {
-    try {
-      popup.opener = null;
-    } catch (err) {
-      // Some browsers expose the new tab as read-only.
-    }
-    return true;
-  }
-
+  // Programmatic window.open is filtered as a popup by Monetag/Adsterra.
+  // A real <a> click inside the user-gesture handler is what they count.
   const link = document.createElement("a");
   link.href = url;
   link.target = "_blank";
   link.rel = "noopener";
-  link.style.display = "none";
+  link.referrerPolicy = "no-referrer-when-downgrade";
+  link.style.position = "absolute";
+  link.style.left = "-9999px";
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -389,20 +438,20 @@ function createVideoCard(item) {
   video.appendChild(source);
 
   const gated = usesSmartLink(videoNumber);
-  const gate = document.createElement("div");
+  const gate = gated ? document.createElement("a") : document.createElement("div");
   gate.className = "play-gate";
-
-  const playButton = gated ? document.createElement("a") : document.createElement("button");
-  playButton.className = "gate-button";
-  playButton.setAttribute("aria-label", "Play video " + videoNumber);
-  playButton.textContent = "▶";
+  gate.setAttribute("aria-label", "Play video " + videoNumber);
   if (gated) {
-    playButton.href = getSmartLink(videoNumber);
-    playButton.target = "_blank";
-    playButton.rel = "noopener";
-  } else {
-    playButton.type = "button";
+    gate.href = getSmartLink(videoNumber);
+    gate.target = "_blank";
+    gate.rel = "noopener";
+    gate.referrerPolicy = "no-referrer-when-downgrade";
   }
+
+  const playButton = document.createElement("span");
+  playButton.className = "gate-button";
+  playButton.setAttribute("aria-hidden", "true");
+  playButton.textContent = "▶";
   gate.appendChild(playButton);
 
   const actions = document.createElement("div");
@@ -422,29 +471,36 @@ function createVideoCard(item) {
     video.controls = true;
   }
 
-  playButton.addEventListener("click", (event) => {
+  function startPlayback() {
+    gate.classList.add("hidden");
+    video.controls = true;
+    video.play().then(() => {
+      track("engagement", { type: "play", video: videoNumber });
+    }).catch(() => {
+      gate.classList.remove("hidden");
+      track("engagement", { type: "play_error", video: videoNumber });
+    });
+  }
+
+  gate.addEventListener("click", (event) => {
     const alreadyUnlocked = !!sessionStorage.getItem(storageKey);
 
     if (gated && !alreadyUnlocked) {
       sessionStorage.setItem(storageKey, "true");
       track("engagement", { type: "smartlink_click", video: videoNumber });
       track("click", { type: "smartlink_click", video: videoNumber });
-      if (playButton.tagName !== "A") {
+      if (gate.tagName !== "A") {
         openSmartLink(getSmartLink(videoNumber));
       }
-    } else if (playButton.tagName === "A") {
-      event.preventDefault();
+      // Let the native <a target="_blank"> navigation count for the
+      // advertiser. Do not consume the same gesture with video.play().
+      gate.classList.add("hidden");
+      video.controls = true;
+      return;
     }
 
-    gate.classList.add("hidden");
-    video.controls = true;
-    video.play().then(() => {
-      track("engagement", { type: "play", video: videoNumber });
-      track("click", { type: "play", video: videoNumber });
-    }).catch(() => {
-      gate.classList.remove("hidden");
-      track("engagement", { type: "play_error", video: videoNumber });
-    });
+    if (gate.tagName === "A") event.preventDefault();
+    startPlayback();
   });
 
   sophon.addEventListener("click", () => {
@@ -498,7 +554,15 @@ function createVastCard(slotId) {
   bar.className = "vast-progress";
   bar.appendChild(document.createElement("span"));
 
-  container.append(video, gate, skip, bar);
+  const clickLayer = document.createElement("a");
+  clickLayer.className = "vast-clickthrough";
+  clickLayer.target = "_blank";
+  clickLayer.rel = "noopener sponsored";
+  clickLayer.referrerPolicy = "no-referrer-when-downgrade";
+  clickLayer.hidden = true;
+  clickLayer.setAttribute("aria-label", "Open advertisement");
+
+  container.append(video, gate, clickLayer, skip, bar);
 
   const meta = document.createElement("div");
   meta.className = "vast-meta";
@@ -551,7 +615,14 @@ createFeaturedSlider();
 
   function relocate() {
     const player = document.querySelector(".rmp-container");
-    if (player && player.parentElement !== slot) slot.appendChild(player);
+    if (player && player.parentElement !== slot) {
+      slot.appendChild(player);
+      window.dispatchEvent(new Event("resize"));
+    }
+    slot.querySelectorAll("iframe").forEach((iframe) => {
+      iframe.style.pointerEvents = "auto";
+      iframe.setAttribute("referrerpolicy", "origin");
+    });
   }
 
   relocate();

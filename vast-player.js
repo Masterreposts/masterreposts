@@ -115,11 +115,22 @@
       var resolved = httpsUrl(replaceMacros(url, macros || {}));
       if (!resolved) return;
       // VAST impression/click trackers are GET pixels. sendBeacon defaults to POST
-      // and is ignored by most ad servers, so only fire GET image beacons.
+      // and is ignored by most ad servers, so fire GET image + keepalive fetch.
       try {
         var img = new Image();
         img.referrerPolicy = "no-referrer-when-downgrade";
         img.src = resolved;
+      } catch (err) {}
+      try {
+        if (typeof fetch === "function") {
+          fetch(resolved, {
+            method: "GET",
+            mode: "no-cors",
+            credentials: "omit",
+            keepalive: true,
+            referrerPolicy: "no-referrer-when-downgrade"
+          }).catch(function () {});
+        }
       } catch (err) {}
     });
   }
@@ -144,6 +155,7 @@
       mode: "cors",
       credentials: "omit",
       referrerPolicy: "no-referrer-when-downgrade",
+      headers: { Accept: "application/xml, text/xml, */*" },
       signal: controller ? controller.signal : undefined
     }).then(function (response) {
       window.clearTimeout(timer);
@@ -194,6 +206,15 @@
     var clickTracking = unique(deepNamed(videoClicks, "ClickTracking").map(function (node) {
       return resolveUrl(nodeText(node), baseUrl);
     }));
+
+    var iconClickThrough = unique(deepNamed(linearEl, "IconClickThrough").map(function (node) {
+      return resolveUrl(nodeText(node), baseUrl);
+    }));
+    var iconClickTracking = unique(deepNamed(linearEl, "IconClickTracking").map(function (node) {
+      return resolveUrl(nodeText(node), baseUrl);
+    }));
+    if (!clickThrough && iconClickThrough[0]) clickThrough = iconClickThrough[0];
+    clickTracking = unique(clickTracking.concat(iconClickTracking));
 
     return {
       duration: parseDuration(nodeText(firstNamed(linearEl, "Duration"))),
@@ -389,27 +410,46 @@
     var skipBtn = card.querySelector(".vast-skip");
     var moreBtn = card.querySelector(".vast-more");
     var progress = card.querySelector(".vast-progress span");
+    var clickLayer = card.querySelector(".vast-clickthrough");
     var loaded = null;
     var tracker = null;
     var started = false;
     var impressionSent = false;
     var skipAt = null;
     var clickThrough = "";
+    var mediaUrl = "";
 
     function setStatus(text) {
       if (status) status.textContent = text || "";
     }
 
-    function macrosAt(time) {
+    function macrosAt(time, extra) {
       var playhead = formatPlayhead(time || 0);
-      return defaultMacros({
+      var macros = defaultMacros({
         CONTENTPLAYHEAD: playhead,
-        ADPLAYHEAD: playhead
+        ADPLAYHEAD: playhead,
+        ASSETURI: mediaUrl,
+        MEDIAFILE: mediaUrl
       });
+      Object.keys(extra || {}).forEach(function (key) {
+        macros[key] = extra[key];
+      });
+      return macros;
+    }
+
+    function showClickLayer() {
+      if (!clickLayer || !clickThrough) return;
+      clickLayer.href = httpsUrl(clickThrough);
+      clickLayer.hidden = false;
+    }
+
+    function hideClickLayer() {
+      if (clickLayer) clickLayer.hidden = true;
     }
 
     function fail(code, message) {
       if (tracker) tracker.error(code);
+      hideClickLayer();
       setStatus(message || "Sponsored ad unavailable");
       card.classList.add("vast-empty");
     }
@@ -424,12 +464,21 @@
         }
         tracker = createTracker(ad);
         skipAt = skipSeconds(ad.linear.skipoffset, ad.linear.duration);
-        clickThrough = ad.linear.clickThrough || "";
+        clickThrough = httpsUrl(ad.linear.clickThrough || "");
+        mediaUrl = media.url || "";
         video.src = media.url;
-        if (moreBtn && ad.linear.clickThrough) {
+        video.controls = false;
+        if (moreBtn && clickThrough) {
           moreBtn.hidden = false;
-          moreBtn.href = ad.linear.clickThrough;
+          moreBtn.href = clickThrough;
+          moreBtn.target = "_blank";
           moreBtn.rel = "noopener sponsored";
+          moreBtn.referrerPolicy = "no-referrer-when-downgrade";
+        }
+        if (clickLayer && clickThrough) {
+          clickLayer.href = clickThrough;
+          clickLayer.rel = "noopener sponsored";
+          clickLayer.referrerPolicy = "no-referrer-when-downgrade";
         }
         setStatus("Sponsored");
         return ad;
@@ -444,12 +493,14 @@
     function playAd() {
       loadAd().then(function () {
         gate.classList.add("hidden");
-        video.controls = true;
+        video.controls = false;
         video.muted = false;
+        showClickLayer();
         return video.play();
       }).catch(function () {
         if (video.src) {
           video.muted = true;
+          showClickLayer();
           video.play().catch(function () {});
         }
       });
@@ -471,6 +522,7 @@
 
     video.addEventListener("playing", function () {
       markImpression();
+      showClickLayer();
       if (started || !tracker) return;
       started = true;
       tracker.event("start", macrosAt(video.currentTime));
@@ -499,6 +551,7 @@
 
     video.addEventListener("ended", function () {
       if (tracker) tracker.event("complete", macrosAt(video.duration));
+      hideClickLayer();
       gate.classList.remove("hidden");
       setStatus("Sponsored");
     });
@@ -525,36 +578,40 @@
         if (skipBtn.disabled) return;
         if (tracker) tracker.event("skip", macrosAt(video.currentTime));
         video.pause();
+        hideClickLayer();
         gate.classList.remove("hidden");
       });
     }
 
-    function handleClickThrough(event) {
-      if (tracker) tracker.click(macrosAt(video.currentTime));
-      if (event && moreBtn && event.currentTarget === moreBtn) return;
-      if (!clickThrough) return;
-      if (event) event.preventDefault();
-      var opened = window.open(clickThrough, "_blank");
-      if (!opened) {
-        var link = document.createElement("a");
-        link.href = clickThrough;
-        link.target = "_blank";
-        link.rel = "noopener sponsored";
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+    function fireClickTracking(event) {
+      var extra = {};
+      if (event && typeof event.clientX === "number") {
+        extra.CLICKPOS = event.clientX + "," + event.clientY;
+        extra.CLICK_POS = extra.CLICKPOS;
+      }
+      if (tracker) tracker.click(macrosAt(video.currentTime, extra));
+      if (window && window.track) {
+        window.track("click", { type: "vast_click", slot: card.dataset.vastSlot || "unknown" });
       }
     }
 
-    if (moreBtn) moreBtn.addEventListener("click", handleClickThrough);
-    video.addEventListener("click", function (event) {
-      if (started && !video.paused) handleClickThrough(event);
-    });
+    if (moreBtn) {
+      moreBtn.addEventListener("click", function (event) {
+        fireClickTracking(event);
+      });
+    }
 
-    gate.querySelector(".gate-button").addEventListener("click", function () {
+    if (clickLayer) {
+      clickLayer.addEventListener("click", function (event) {
+        fireClickTracking(event);
+      });
+    }
+
+    function onPlayIntent(event) {
+      if (event) event.preventDefault();
       playAd();
-    });
+    }
+    if (gate) gate.addEventListener("click", onPlayIntent);
 
     if ("IntersectionObserver" in window) {
       var observer = new IntersectionObserver(function (entries) {
