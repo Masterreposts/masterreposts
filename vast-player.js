@@ -251,7 +251,8 @@
     return {
       id: attr(adEl, "id"),
       isWrapper: !!wrapper,
-      wrapperUrl: wrapper ? resolveUrl(nodeText(firstNamed(wrapper, "VASTAdTagURI") || deepNamed(wrapper, "VASTAdTagURI")[0]), baseUrl) : "",
+      // VAST 2.0/3.0 uses VASTAdTagURI; VAST 4.x and some wrappers use VASTAdTagURL.
+      wrapperUrl: wrapper ? resolveUrl(nodeText(firstNamed(wrapper, "VASTAdTagURI") || deepNamed(wrapper, "VASTAdTagURI")[0] || deepNamed(wrapper, "VASTAdTagURL")[0]), baseUrl) : "",
       impressions: impressions,
       errors: errors,
       linear: linear
@@ -412,6 +413,7 @@
     var progress = card.querySelector(".vast-progress span");
     var clickLayer = card.querySelector(".vast-clickthrough");
     var loaded = null;
+    var loadAttempts = 0;
     var tracker = null;
     var started = false;
     var impressionSent = false;
@@ -483,6 +485,14 @@
         setStatus("Sponsored");
         return ad;
       }).catch(function (err) {
+        // Forget the failed request so the next play intent re-requests the
+        // tag (network blips and rate-limited first requests are common).
+        // A cap keeps a persistently dead tag from being hammered.
+        loaded = null;
+        loadAttempts += 1;
+        if (loadAttempts >= 3) {
+          card.dataset.vastDead = "true";
+        }
         var code = /wrapper/i.test(err.message) ? 302 : /no ad/i.test(err.message) ? 303 : 900;
         fail(code, "Sponsored ad unavailable");
         throw err;
@@ -491,6 +501,7 @@
     }
 
     function playAd() {
+      if (card.dataset.vastDead) return;
       loadAd().then(function () {
         gate.classList.add("hidden");
         video.controls = false;
@@ -498,11 +509,17 @@
         showClickLayer();
         return video.play();
       }).catch(function () {
-        if (video.src) {
-          video.muted = true;
-          showClickLayer();
-          video.play().catch(function () {});
+        if (!video.src) {
+          // Tag request failed: keep the play gate visible and try again on
+          // the next tap (until the retry cap marks the card dead).
+          gate.classList.remove("hidden");
+          return;
         }
+        video.muted = true;
+        showClickLayer();
+        video.play().catch(function () {
+          gate.classList.remove("hidden");
+        });
       });
     }
 

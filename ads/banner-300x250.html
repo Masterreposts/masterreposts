@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <meta name="referrer" content="origin">
   <base target="_blank">
   <title>Advertisement</title>
@@ -17,6 +18,7 @@
       height: 250px;
       overflow: hidden;
     }
+    body.ad-empty { display: none; }
   </style>
 </head>
 <body>
@@ -34,5 +36,40 @@
     };
   </script>
   <script src="https://throbexhaust.com/2449fe80e47d997db552/invoke.js"></script>
+  <script>
+    /*
+      Fallback page (used only when the parent's about:blank document.write
+      path fails). Count the impression only once the network renders the ad
+      iframe — never on mere script load.
+    */
+    (function () {
+      var sent = false;
+      function hasContent() {
+        return !!document.body.querySelector("iframe[src], a[href]");
+      }
+      function notify() {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: "masterreposts-ad", slot: "banner", event: "impression" }, "*");
+          }
+        } catch (err) {}
+      }
+      function check() {
+        if (sent) return;
+        if (hasContent()) {
+          sent = true;
+          notify();
+          return;
+        }
+        if (Date.now() - startedAt > 30000) {
+          document.body.classList.add("ad-empty");
+        }
+      }
+      var startedAt = Date.now();
+      new MutationObserver(check).observe(document.body, { childList: true, subtree: true });
+      setInterval(check, 500);
+      setTimeout(check, 0);
+    })();
+  </script>
 </body>
 </html>

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <meta name="referrer" content="no-referrer-when-downgrade">
   <base target="_blank">
   <title>Advertisement</title>
@@ -20,10 +21,49 @@
       width: 100%;
       min-height: 250px;
     }
+    body.ad-empty { display: none; }
   </style>
 </head>
 <body>
   <script async="async" data-cfasync="false" src="https://throbexhaust.com/e02a3877d8ff4a051ec557717047de62/invoke.js"></script>
   <div id="container-e02a3877d8ff4a051ec557717047de62"></div>
+  <script>
+    /*
+      Fallback page (used only when the parent's about:blank document.write
+      path fails). Count the impression only once the network renders real
+      content inside the container — never on mere script load.
+    */
+    (function () {
+      var container = document.getElementById("container-e02a3877d8ff4a051ec557717047de62");
+      if (!container) return;
+
+      var sent = false;
+      function hasContent() {
+        return !!container.querySelector("a[href], iframe, img, [data-hash]");
+      }
+      function notify() {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: "masterreposts-ad", slot: "native", event: "impression" }, "*");
+          }
+        } catch (err) {}
+      }
+      function check() {
+        if (sent) return;
+        if (hasContent()) {
+          sent = true;
+          notify();
+          return;
+        }
+        if (Date.now() - startedAt > 30000) {
+          document.body.classList.add("ad-empty");
+        }
+      }
+      var startedAt = Date.now();
+      new MutationObserver(check).observe(container, { childList: true, subtree: true });
+      setInterval(check, 500);
+      setTimeout(check, 0);
+    })();
+  </script>
 </body>
 </html>

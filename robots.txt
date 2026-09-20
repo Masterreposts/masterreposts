@@ -1,2 +1,60 @@
+# Block all crawlers from the entire site.
 User-agent: *
 Disallow: /
+
+# Explicit blocks for the big engines (belt and braces; some ignore `*`).
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Googlebot-Image
+Disallow: /
+
+User-agent: Googlebot-Video
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: Applebot
+Disallow: /
+
+User-agent: FacebookExternalHit
+Disallow: /
+
+User-agent: Twitterbot
+Disallow: /
+
+User-agent: LinkedInBot
+Disallow: /
+
+User-agent: Slackbot
+Disallow: /
+
+User-agent: WhatsApp
+Disallow: /
+
+User-agent: TelegramBot
+Disallow: /
+
+User-agent: Pinterestbot
+Disallow: /
+
+User-agent: Redditbot
+Disallow: /
+
+User-agent: AdsBot-Google
+Disallow: /
+
+# No ad landing pages are hosted on this domain, so blocking Google's ad
+# crawler is safe. Adsterra/Monetag verification does not depend on this file.
+
+# No sitemap: nothing here should be indexed.

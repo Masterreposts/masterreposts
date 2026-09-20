@@ -206,16 +206,109 @@ function track(eventName, extra) {
     // Analytics must never affect playback or ad loading.
   }
 
+  // Count each user click once. "engagement" events are behavioral only and
+  // must not increment the clicks metric (previously this line made every
+  // smartlink/sophon/terabox click count twice and counted play/featured as clicks).
   const normalized = (extra && extra.type) || eventName;
   if (normalized === "impression" || normalized === "ad_iframe" || normalized === "vast") {
     incrementMetric("impression");
   }
-  if (normalized === "click" || normalized === "smartlink_click" || normalized === "vast_click" || normalized === "featured" || normalized === "play" || normalized === "sophon" || normalized === "terabox") {
+  if (normalized === "click" || normalized === "smartlink_click" || normalized === "vast_click" || normalized === "sophon" || normalized === "terabox") {
     incrementMetric("click");
   }
 }
 
 window.track = track;
+
+/*
+  Impression counting for the in-feed iframe ad slots.
+
+  The wrapper iframe fires "load" before the ad network renders anything, so
+  counting on load recorded impressions for blank slots. Instead, poll the
+  inner document for real ad content and count exactly once per slot.
+*/
+function hasRenderedAdContent(win, type) {
+  try {
+    const doc = win.document;
+    if (!doc || !doc.body) return false;
+    // Only the ad network's invoke.js ever puts iframes/anchors/images inside
+    // these wrapper documents, so any of them means an ad is rendering.
+    return !!doc.querySelector("iframe, img[src], a[href]");
+  } catch (err) {
+    // Cross-origin inner frames: the ad network replaced our wrapper document,
+    // which only happens once a real ad is rendering.
+    return err instanceof DOMException || err.name === "SecurityError";
+  }
+}
+
+function trackAdImpression(win, slotType, timeoutMs) {
+  let sent = false;
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    if (!sent && hasRenderedAdContent(win, slotType)) {
+      sent = true;
+      window.clearInterval(timer);
+      countAdImpression(win, slotType);
+      return;
+    }
+    if (Date.now() - startedAt > (timeoutMs || 30000)) window.clearInterval(timer);
+  }, 500);
+}
+
+// One impression per frame window, no matter which detector saw it first
+// (parent-side polling, the load event, or the fallback page's postMessage).
+const countedAdWindows = new WeakSet();
+
+function countAdImpression(win, slotType) {
+  try {
+    if (!win || countedAdWindows.has(win)) return;
+    countedAdWindows.add(win);
+    track("impression", { type: "ad_iframe", slot: slotType, rendered: true });
+  } catch (err) {
+    // Analytics must never affect playback or ad loading.
+  }
+}
+
+// Static fallback pages (ads/native.html, ads/banner-300x250.html) post an
+// "impression" message once their container really renders ad content.
+window.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.source !== "masterreposts-ad" || data.event !== "impression") return;
+  countAdImpression(event.source, data.slot || "unknown");
+});
+
+// Page-top native slot (static markup in index.html): count an impression
+// when the Adsterra container actually renders content in the viewport.
+(function trackTopNativeImpression() {
+  const section = document.querySelector("section.ad-slot.native-ad");
+  const container = document.getElementById("container-" + ads.nativeId);
+  if (!section || !container) return;
+
+  let sent = false;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting || sent) return;
+      if (container.querySelector("a[href], iframe, img")) {
+        sent = true;
+        observer.disconnect();
+        track("impression", { type: "ad_iframe", slot: "native-top", rendered: true });
+      }
+    });
+  }, { threshold: 0.5 });
+  observer.observe(section);
+  // Fill may land before the observer callback runs; re-check on DOM changes.
+  new MutationObserver(() => {
+    if (sent) return;
+    if (container.querySelector("a[href], iframe, img")) {
+      const rect = section.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        sent = true;
+        observer.disconnect();
+        track("impression", { type: "ad_iframe", slot: "native-top", rendered: true });
+      }
+    }
+  }).observe(container, { childList: true, subtree: true });
+})();
 
 function adFrameHtml(type) {
   const origin = (window.location.origin || "") + "/";
@@ -276,13 +369,11 @@ function createAdSlot(type) {
     frame.height = "400";
   }
 
-  let impressionSent = false;
+  trackAdImpression(frame.contentWindow, type);
+
   frame.addEventListener("load", () => {
     try {
-      if (!impressionSent) {
-        impressionSent = true;
-        track("impression", { type: "ad_iframe", slot: type });
-      }
+      trackAdImpression(frame.contentWindow, type);
       const doc = frame.contentDocument;
       if (!doc) return;
       const resize = () => {
@@ -324,6 +415,14 @@ function createAdSlot(type) {
   } catch (err) {
     frame.src = type === "banner" ? ads.bannerSrc : ads.nativeSrc;
   }
+
+  // Blank-slot hygiene: if nothing renders, hide the empty dashed box so the
+  // feed does not show dead ad placeholders.
+  window.setTimeout(() => {
+    if (!hasRenderedAdContent(frame.contentWindow, type)) {
+      section.classList.add("ad-empty");
+    }
+  }, 30000);
 
   return section;
 }
