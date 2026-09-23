@@ -644,7 +644,9 @@ footer {
 }
 
 .footer-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   padding: 9px 16px;
   border: 1px solid var(--card-border);
   border-radius: 999px;
@@ -670,9 +672,29 @@ footer {
   outline-offset: 2px;
 }
 
+.footer-link svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+.footer-link--telegram:hover {
+  border-color: #229ed9;
+  background: rgba(34, 158, 217, 0.12);
+  color: #4fb5e8;
+}
+
+.footer-link--instagram:hover {
+  border-color: #e1306c;
+  background: rgba(225, 48, 108, 0.12);
+  color: #f06292;
+}
+
 @media (max-width: 600px) {
   .footer-links { gap: 8px; }
   .footer-link { padding: 8px 13px; font-size: 11.5px; }
+  .footer-link svg { width: 12px; height: 12px; }
 }
 
 @media (max-width: 600px) {
