@@ -74,7 +74,6 @@ const pagerPrev = document.getElementById("pager-prev");
 const pagerNext = document.getElementById("pager-next");
 const pagerNumbers = document.getElementById("pager-numbers");
 const pagerStatus = document.getElementById("pager-status");
-const analyticsKey = "masterreposts_daily_metrics";
 
 /* Pages are addressable and shareable via #page=N (back/forward works). */
 function readPageFromHash() {
@@ -158,87 +157,7 @@ function collectContext() {
   };
 }
 
-function readStoredMetrics() {
-  try {
-    const raw = localStorage.getItem(analyticsKey);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (err) {
-    return {};
-  }
-}
-
-function writeStoredMetrics(metrics) {
-  try {
-    localStorage.setItem(analyticsKey, JSON.stringify(metrics));
-  } catch (err) {
-    // Analytics must never affect playback or ad loading.
-  }
-}
-
-function formatMetricDate(dateValue) {
-  if (!dateValue) return "";
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  });
-}
-
-function aggregateRevenue(impressions, clicks) {
-  return Number((impressions * 0.0008 + clicks * 0.004).toFixed(4));
-}
-
-function renderMetricsTable() {
-  const table = document.getElementById("daily-metrics");
-  if (!table) return;
-
-  const rows = Object.entries(readStoredMetrics())
-    .map(([dateKey, values]) => {
-      const impressions = Number(values && values.impressions ? values.impressions : 0);
-      const clicks = Number(values && values.clicks ? values.clicks : 0);
-      const revenue = Number(values && values.revenue ? values.revenue : aggregateRevenue(impressions, clicks));
-      return { dateKey, impressions, clicks, revenue };
-    })
-    .sort((a, b) => new Date(b.dateKey) - new Date(a.dateKey))
-    .slice(0, 7);
-
-  const body = table.querySelector("tbody");
-  if (!body) return;
-
-  body.innerHTML = rows.length
-    ? rows.map((row) => `
-        <tr>
-          <td>${formatMetricDate(row.dateKey)}</td>
-          <td>${row.impressions}</td>
-          <td>${row.clicks}</td>
-          <td>$${row.revenue.toFixed(4)}</td>
-        </tr>
-      `).join("")
-    : '<tr><td colspan="4">No metric data yet.</td></tr>';
-}
-
-function incrementMetric(kind) {
-  if (!window.localStorage) return;
-  try {
-    const metrics = readStoredMetrics();
-    const dateKey = new Date().toISOString().slice(0, 10);
-    const current = metrics[dateKey] || { impressions: 0, clicks: 0, revenue: 0 };
-
-    if (kind === "impression") current.impressions = Number(current.impressions || 0) + 1;
-    if (kind === "click") current.clicks = Number(current.clicks || 0) + 1;
-    current.revenue = aggregateRevenue(current.impressions, current.clicks);
-    metrics[dateKey] = current;
-    writeStoredMetrics(metrics);
-    renderMetricsTable();
-  } catch (err) {
-    // Analytics must never affect playback or ad loading.
-  }
-}
-
-/* Events that feed the Daily Metrics table.
+/* Event classification for first-party analytics.
    Impressions: rendered in-feed ad iframes, the page-top native slot, VAST
    playback, the featured video slider player, and the SmartLink offer gate
    being seen. Clicks: SmartLink play-gate taps, Sophon/Terabox buttons,
@@ -257,18 +176,9 @@ function track(eventName, extra) {
     // Analytics must never affect playback or ad loading.
   }
 
-  // Count each user click once. "engagement" events are behavioral only and
-  // must not increment the clicks metric (previously this line made every
-  // smartlink/sophon/terabox click count twice and counted play/featured as clicks).
+  // "engagement" events are behavioral only; impression/click-type events
+  // are recorded to the session analytics log via the event type itself.
   if (eventName === "engagement") return;
-
-  const normalized = (extra && extra.type) || eventName;
-  if (IMPRESSION_EVENT_TYPES.indexOf(normalized) !== -1) {
-    incrementMetric("impression");
-  }
-  if (CLICK_EVENT_TYPES.indexOf(normalized) !== -1) {
-    incrementMetric("click");
-  }
 }
 
 window.track = track;
