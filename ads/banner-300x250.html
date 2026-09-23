@@ -54,6 +54,16 @@
           }
         } catch (err) {}
       }
+      // Clicks inside the rendered ad iframe land in a cross-origin document,
+      // but a click anywhere in this wrapper still signals user intent; the
+      // parent deduplicates against its own blur/iframe-focus detector.
+      document.addEventListener("click", function () {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: "masterreposts-ad", slot: "banner", event: "click" }, "*");
+          }
+        } catch (err) {}
+      }, true);
       function check() {
         if (sent) return;
         if (hasContent()) {

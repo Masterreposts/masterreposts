@@ -157,14 +157,20 @@ function collectContext() {
   };
 }
 
-/* Event classification for first-party analytics.
-   Impressions: rendered in-feed ad iframes, the page-top native slot, VAST
-   playback, the featured video slider player, and the SmartLink offer gate
-   being seen. Clicks: SmartLink play-gate taps, Sophon/Terabox buttons,
-   VAST clickthroughs, native/banner ad clicks and featured slider clicks. */
-const IMPRESSION_EVENT_TYPES = ["impression", "ad_iframe", "vast", "smartlink", "slider"];
-const CLICK_EVENT_TYPES = ["click", "smartlink_click", "vast_click", "sophon", "terabox", "native_click", "banner_click", "slider_click"];
+/*
+  First-party analytics.
 
+  Every impression/click event is recorded to a session log
+  ("masterreposts_analytics" in sessionStorage; inspect it in DevTools).
+  These events mirror the site's own surfaces only — the ad networks
+  (Adsterra, Monetag, the VAST tag) count impressions and clicks on their
+  own servers through their tags, pixels, and real link navigations.
+
+  Impressions: rendered in-feed ad iframes, the page-top native slot, VAST
+  playback, the featured video slider player, and the SmartLink offer gate
+  being seen. Clicks: SmartLink play-gate taps, Sophon/Terabox buttons,
+  VAST clickthroughs, native/banner ad clicks and featured slider clicks.
+*/
 function track(eventName, extra) {
   const entry = Object.assign({ event: eventName }, collectContext(), extra || {});
   try {
@@ -175,10 +181,6 @@ function track(eventName, extra) {
   } catch (err) {
     // Analytics must never affect playback or ad loading.
   }
-
-  // "engagement" events are behavioral only; impression/click-type events
-  // are recorded to the session analytics log via the event type itself.
-  if (eventName === "engagement") return;
 }
 
 window.track = track;

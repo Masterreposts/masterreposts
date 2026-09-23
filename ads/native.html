@@ -48,6 +48,15 @@
           }
         } catch (err) {}
       }
+      // Clicks on the ad (anchors injected by invoke.js) are reported to the
+      // parent so the page can log them; dedupe happens parent-side.
+      document.addEventListener("click", function () {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: "masterreposts-ad", slot: "native", event: "click" }, "*");
+          }
+        } catch (err) {}
+      }, true);
       function check() {
         if (sent) return;
         if (hasContent()) {
