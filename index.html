@@ -53,6 +53,15 @@
     </section>
 
     <div id="video-feed"></div>
+
+    <nav class="feed-pager" aria-label="Video feed pages">
+      <div class="pager-row">
+        <button type="button" id="pager-prev" class="pager-btn" aria-label="Previous page">&larr; Previous Page</button>
+        <div class="pager-numbers" id="pager-numbers" role="group" aria-label="Go to page"></div>
+        <button type="button" id="pager-next" class="pager-btn" aria-label="Next page">Next Page &rarr;</button>
+      </div>
+      <span id="pager-status" class="pager-status" aria-live="polite">Page 1</span>
+    </nav>
   </main>
 
   <section class="metrics-panel" aria-label="Daily metrics">

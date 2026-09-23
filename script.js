@@ -66,8 +66,39 @@ const ads = {
 const vastTagUrl = "https://direct-league.com/dWmLF.z/dTGmNLvHZZGqUB/vepmJ9wuRZfUllxkhP/T/crzZOwDJE/0mMUDJUet/NYzMM/4/MlTfQnw/OWSNZGsOaBW_1Yp-dCDl0FxJ";
 
 const featuredCount = 10;
+const videosPerPage = 2;
+const totalPages = Math.ceil(videos.length / videosPerPage);
 const feed = document.getElementById("video-feed");
+const featuredSlot = document.getElementById("featured-video-slider");
+const pagerPrev = document.getElementById("pager-prev");
+const pagerNext = document.getElementById("pager-next");
+const pagerNumbers = document.getElementById("pager-numbers");
+const pagerStatus = document.getElementById("pager-status");
 const analyticsKey = "masterreposts_daily_metrics";
+
+/* Pages are addressable and shareable via #page=N (back/forward works). */
+function readPageFromHash() {
+  const match = window.location.hash.match(/^#p(?:age)?=(\d+)$/i);
+  const requested = match ? parseInt(match[1], 10) : 1;
+  if (!requested || requested < 1) return 1;
+  return Math.min(requested, totalPages);
+}
+
+let currentPage = readPageFromHash();
+let firstRender = true;
+let pendingScrollVideo = 0;
+
+/* Where the user was scrolled on each page when they left it, so going
+   back to an earlier page can land exactly where they were. */
+const scrollMemory = {};
+
+function highlightReel(videoNumber) {
+  const target = document.getElementById("reel-" + videoNumber);
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  target.classList.add("reel-highlight");
+  window.setTimeout(() => target.classList.remove("reel-highlight"), 1400);
+}
 
 function getSmartLink(videoNumber) {
   return videoNumber % 2 === 1
@@ -90,15 +121,27 @@ function adAfterVideo(videoNumber) {
   return null;
 }
 
-function buildFeedItems() {
+function buildPageItems(page) {
   const items = [];
-  videos.forEach((src, index) => {
-    const number = index + 1;
-    items.push({ type: "video", src: src, number: number });
-    if (number % 6 === 0) items.push({ type: "vast-ad" });
+  const firstVideo = (page - 1) * videosPerPage + 1;
+  const lastVideo = Math.min(firstVideo + videosPerPage - 1, videos.length);
+  let pageHasAd = false;
+
+  for (let number = firstVideo; number <= lastVideo; number += 1) {
+    items.push({ type: "video", src: videos[number - 1], number: number });
+    if (number % 6 === 0) {
+      items.push({ type: "vast-ad" });
+      pageHasAd = true;
+    }
     const slot = adAfterVideo(number);
-    if (slot) items.push({ type: slot });
-  });
+    if (slot) {
+      items.push({ type: slot });
+      pageHasAd = true;
+    }
+  }
+
+  /* Keep every page monetized when the repeating schedule skips it. */
+  if (!pageHasAd) items.push({ type: "banner" });
   return items;
 }
 
@@ -195,6 +238,14 @@ function incrementMetric(kind) {
   }
 }
 
+/* Events that feed the Daily Metrics table.
+   Impressions: rendered in-feed ad iframes, the page-top native slot, VAST
+   playback, the featured video slider player, and the SmartLink offer gate
+   being seen. Clicks: SmartLink play-gate taps, Sophon/Terabox buttons,
+   VAST clickthroughs, native/banner ad clicks and featured slider clicks. */
+const IMPRESSION_EVENT_TYPES = ["impression", "ad_iframe", "vast", "smartlink", "slider"];
+const CLICK_EVENT_TYPES = ["click", "smartlink_click", "vast_click", "sophon", "terabox", "native_click", "banner_click", "slider_click"];
+
 function track(eventName, extra) {
   const entry = Object.assign({ event: eventName }, collectContext(), extra || {});
   try {
@@ -209,11 +260,13 @@ function track(eventName, extra) {
   // Count each user click once. "engagement" events are behavioral only and
   // must not increment the clicks metric (previously this line made every
   // smartlink/sophon/terabox click count twice and counted play/featured as clicks).
+  if (eventName === "engagement") return;
+
   const normalized = (extra && extra.type) || eventName;
-  if (normalized === "impression" || normalized === "ad_iframe" || normalized === "vast") {
+  if (IMPRESSION_EVENT_TYPES.indexOf(normalized) !== -1) {
     incrementMetric("impression");
   }
-  if (normalized === "click" || normalized === "smartlink_click" || normalized === "vast_click" || normalized === "sophon" || normalized === "terabox") {
+  if (CLICK_EVENT_TYPES.indexOf(normalized) !== -1) {
     incrementMetric("click");
   }
 }
@@ -269,12 +322,48 @@ function countAdImpression(win, slotType) {
   }
 }
 
+/*
+  Click counting for the iframe ad slots and the featured video slider.
+
+  Native tags inject same-origin anchors into the wrapper document, so a
+  capture-phase listener records those clicks directly. The 300x250 format
+  renders a nested cross-origin iframe whose clicks never bubble out: when
+  the user clicks it, the parent window blurs while the ad iframe becomes
+  document.activeElement, and that is counted instead. Both paths are
+  deduplicated per slot type.
+*/
+const recentAdClicks = {};
+
+function trackAdClick(slotType) {
+  const now = Date.now();
+  if (now - (recentAdClicks[slotType] || 0) < 1500) return;
+  recentAdClicks[slotType] = now;
+  const type = slotType === "banner"
+    ? "banner_click"
+    : slotType === "slider" ? "slider_click" : "native_click";
+  track("click", { type: type, slot: slotType });
+}
+
+window.addEventListener("blur", () => {
+  const active = document.activeElement;
+  if (!active || active.tagName !== "IFRAME") return;
+  if (active.classList.contains("banner-frame")) trackAdClick("banner");
+  else if (active.classList.contains("native-frame")) trackAdClick("native");
+  else if (featuredSlot && featuredSlot.contains(active)) trackAdClick("slider");
+});
+
 // Static fallback pages (ads/native.html, ads/banner-300x250.html) post an
 // "impression" message once their container really renders ad content.
 window.addEventListener("message", (event) => {
   const data = event.data;
-  if (!data || data.source !== "masterreposts-ad" || data.event !== "impression") return;
-  countAdImpression(event.source, data.slot || "unknown");
+  if (!data || data.source !== "masterreposts-ad") return;
+  if (data.event === "impression") {
+    countAdImpression(event.source, data.slot || "unknown");
+    return;
+  }
+  if (data.event === "click") {
+    trackAdClick(data.slot === "banner" ? "banner" : "native");
+  }
 });
 
 // Page-top native slot (static markup in index.html): count an impression
@@ -283,6 +372,9 @@ window.addEventListener("message", (event) => {
   const section = document.querySelector("section.ad-slot.native-ad");
   const container = document.getElementById("container-" + ads.nativeId);
   if (!section || !container) return;
+
+  // Clicks on native anchors injected into the page-top container.
+  container.addEventListener("click", () => trackAdClick("native"), true);
 
   let sent = false;
   const observer = new IntersectionObserver((entries) => {
@@ -376,6 +468,7 @@ function createAdSlot(type) {
       trackAdImpression(frame.contentWindow, type);
       const doc = frame.contentDocument;
       if (!doc) return;
+      doc.addEventListener("click", () => trackAdClick(type), true);
       const resize = () => {
         const body = doc.body;
         const rootEl = doc.documentElement;
@@ -409,6 +502,8 @@ function createAdSlot(type) {
       doc.open();
       doc.write(adFrameHtml(type));
       doc.close();
+      // Same-origin wrapper document: native anchors are real children here.
+      doc.addEventListener("click", () => trackAdClick(type), true);
     } else {
       frame.src = type === "banner" ? ads.bannerSrc : ads.nativeSrc;
     }
@@ -463,11 +558,13 @@ function createFeaturedSlider() {
 
     item.append(thumb, play, caption);
     item.addEventListener("click", () => {
-      const target = document.getElementById("reel-" + videoNumber);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-        target.classList.add("reel-highlight");
-        window.setTimeout(() => target.classList.remove("reel-highlight"), 1400);
+      // With 2 videos per page the reel may live on another page.
+      const targetPage = Math.ceil(videoNumber / videosPerPage);
+      if (targetPage !== currentPage) {
+        pendingScrollVideo = videoNumber;
+        goPage(targetPage);
+      } else {
+        highlightReel(videoNumber);
       }
       track("engagement", { type: "featured", video: videoNumber });
     });
@@ -568,6 +665,34 @@ function createVideoCard(item) {
   if (sessionStorage.getItem(storageKey)) {
     gate.classList.add("hidden");
     video.controls = true;
+  }
+
+  /*
+    SmartLink offer impression: the gated play-gate IS the offer surface.
+    Count it once per video per session, and only when it is really seen.
+  */
+  if (gated && !sessionStorage.getItem(storageKey)) {
+    const seenKey = "masterreposts_slimpression_" + videoNumber;
+    let offerSeen = false;
+    try { offerSeen = !!sessionStorage.getItem(seenKey); } catch (err) {}
+    if (!offerSeen) {
+      const sendSmartlinkImpression = () => {
+        try { sessionStorage.setItem(seenKey, "true"); } catch (err) {}
+        track("impression", { type: "smartlink", video: videoNumber });
+      };
+      if ("IntersectionObserver" in window) {
+        const offerObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            offerObserver.disconnect();
+            sendSmartlinkImpression();
+          });
+        }, { threshold: 0.5 });
+        offerObserver.observe(gate);
+      } else {
+        sendSmartlinkImpression();
+      }
+    }
   }
 
   function startPlayback() {
@@ -688,25 +813,117 @@ function createVastCard(slotId) {
   return card;
 }
 
-const feedItems = buildFeedItems();
 let vastSlot = 0;
 
-feedItems.forEach((item) => {
-  if (item.type === "video") {
-    feed.appendChild(createVideoCard(item));
-    return;
+function mountPageItems(page) {
+  buildPageItems(page).forEach((item) => {
+    if (item.type === "video") {
+      feed.appendChild(createVideoCard(item));
+      return;
+    }
+    if (item.type === "vast-ad") {
+      vastSlot += 1;
+      feed.appendChild(createVastCard(vastSlot));
+      return;
+    }
+    if (item.type === "banner" || item.type === "native") {
+      feed.appendChild(createAdSlot(item.type));
+    }
+  });
+}
+
+function updatePager() {
+  if (pagerStatus) pagerStatus.textContent = "Page " + currentPage + " of " + totalPages;
+  if (pagerPrev) {
+    pagerPrev.disabled = currentPage <= 1;
+    pagerPrev.setAttribute("aria-disabled", String(currentPage <= 1));
   }
-  if (item.type === "vast-ad") {
-    vastSlot += 1;
-    feed.appendChild(createVastCard(vastSlot));
-    return;
+  if (pagerNext) {
+    pagerNext.disabled = currentPage >= totalPages;
+    pagerNext.setAttribute("aria-disabled", String(currentPage >= totalPages));
   }
-  if (item.type === "banner" || item.type === "native") {
-    feed.appendChild(createAdSlot(item.type));
+  if (pagerNumbers) {
+    if (pagerNumbers.childElementCount !== totalPages) {
+      pagerNumbers.innerHTML = "";
+      for (let number = 1; number <= totalPages; number += 1) {
+        const pageBtn = document.createElement("button");
+        pageBtn.type = "button";
+        pageBtn.className = "pager-num";
+        pageBtn.textContent = String(number);
+        pageBtn.setAttribute("aria-label", "Go to page " + number);
+        pageBtn.addEventListener("click", () => goPage(number));
+        pagerNumbers.appendChild(pageBtn);
+      }
+    }
+    Array.prototype.forEach.call(pagerNumbers.children, (btn, index) => {
+      const isCurrent = index + 1 === currentPage;
+      btn.classList.toggle("current", isCurrent);
+      btn.disabled = isCurrent;
+      if (isCurrent) {
+        btn.setAttribute("aria-current", "page");
+      } else {
+        btn.removeAttribute("aria-current");
+      }
+    });
   }
-});
+}
+
+function renderPage(page) {
+  const fromPage = currentPage;
+  currentPage = page;
+  feed.querySelectorAll("video").forEach((video) => {
+    try { video.pause(); } catch (err) {}
+  });
+  feed.innerHTML = "";
+  mountPageItems(page);
+  updatePager();
+
+  const heading = document.querySelector(".feed-heading");
+  if (heading) {
+    heading.textContent = "Main Reel Feed — Page " + page + " of " + totalPages;
+    heading.classList.remove("page-heading-swap");
+    void heading.offsetWidth;
+    heading.classList.add("page-heading-swap");
+  }
+
+  if (pendingScrollVideo) {
+    const videoNumber = pendingScrollVideo;
+    pendingScrollVideo = 0;
+    window.setTimeout(() => highlightReel(videoNumber), 80);
+  } else if (firstRender) {
+    firstRender = false;
+  } else {
+    const remembered = scrollMemory[page];
+    if (page < fromPage && typeof remembered === "number") {
+      // Back to an earlier page: jump straight to the remembered offset.
+      // Card heights are aspect-ratio based, so layout is already final.
+      window.scrollTo({ top: remembered, behavior: "auto" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    track("engagement", { type: "page_view", page: page });
+  }
+}
+
+function goPage(page) {
+  if (page < 1 || page > totalPages || page === currentPage) return;
+  window.location.hash = "#page=" + page;
+}
 
 createFeaturedSlider();
+renderPage(currentPage);
+
+if (pagerPrev) pagerPrev.addEventListener("click", () => goPage(currentPage - 1));
+if (pagerNext) pagerNext.addEventListener("click", () => goPage(currentPage + 1));
+
+window.addEventListener("hashchange", () => {
+  const requested = readPageFromHash();
+  if (requested === currentPage) return;
+  // Capture where the user was on the page they are leaving, whether the
+  // navigation came from the pager buttons or the browser back/forward.
+  scrollMemory[currentPage] = window.scrollY;
+  renderPage(requested);
+});
 
 (function placeFeaturedVideoSlider() {
   const slot = document.getElementById("featured-video-slider");
@@ -729,6 +946,48 @@ createFeaturedSlider();
     childList: true,
     subtree: true
   });
+})();
+
+/*
+  Featured Adsterra video slider: impression once the player has really
+  mounted and is on screen; clicks via a capture listener on the slot plus
+  the iframe-focus fallback in the window blur handler.
+*/
+(function trackFeaturedSliderEvents() {
+  const slot = featuredSlot;
+  if (!slot) return;
+
+  let sent = false;
+  function hasPlayer() {
+    return !!slot.querySelector(".rmp-container, iframe");
+  }
+  function markImpression() {
+    if (sent) return;
+    sent = true;
+    track("impression", { type: "slider", slot: "featured-video" });
+  }
+
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || sent) return;
+        if (hasPlayer()) {
+          observer.disconnect();
+          markImpression();
+        }
+      });
+    }, { threshold: 0.5 });
+    observer.observe(slot);
+  }
+
+  // The player mounts asynchronously; re-check whenever the slot changes.
+  new MutationObserver(() => {
+    if (sent || !hasPlayer()) return;
+    const rect = slot.getBoundingClientRect();
+    if (rect.top < window.innerHeight && rect.bottom > 0) markImpression();
+  }).observe(slot, { childList: true, subtree: true });
+
+  slot.addEventListener("click", () => trackAdClick("slider"), true);
 })();
 
 document.addEventListener("play", (event) => {
